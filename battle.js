@@ -8,10 +8,16 @@ window.Battle = (() => {
     road: "#9c845c", wall: "#efe2c4", tree: "#7d8f55", treeDark: "#55663a",
   };
   const FOE_KINDS = { horsearcher: "knight" };
-  const SPACING = { knight: [3.2, 2.2], leader: [3.2, 2.2], horsearcher: [3.2, 2.2], saint: [3.4, 2.2], foot: [2.1, 1.7], archer: [2.1, 1.7], pilgrim: [2.0, 1.7], siegetower: [5, 3], ram: [5, 3] };
+  const SPACING = {
+    knight: [3.2, 2.2], leader: [3.2, 2.2], king: [3.4, 2.2], templar: [3.2, 2.2], hospitaller: [3.2, 2.2], horsearcher: [3.2, 2.2], saint: [3.4, 2.2],
+    foot: [2.1, 1.7], archer: [2.1, 1.7], crossbow: [2.1, 1.7], pilgrim: [2.0, 1.7], crowd: [1.9, 1.6],
+    pope: [2.4, 1.8], bishop: [2.3, 1.8], priest: [2.1, 1.7],
+    siegetower: [5, 3], ram: [5, 3], trebuchet: [6, 4], ship: [8, 5],
+  };
+  const SIZE = { siegetower: 5.2, ram: 3.6, trebuchet: 4.4, ship: 6.5 };
 
   let root, canvas, ctx, captionEl, dotsEl, titleEl, metaEl, playBtn;
-  let scene = null, phase = 0, clock = 0, playing = true, raf = 0, onCloseCb = null;
+  let scene = null, phase = 0, clock = 0, playing = true, raf = 0, onCloseCb = null, autoClose = false, closeTimer = 0;
   let W = 0, H = 0, sc = 1, ox = 0, oy = 0, narrow = false, camX = null, dragX = null, manualUntil = 0;
   let units = {};
   let particles = [];
@@ -152,10 +158,12 @@ window.Battle = (() => {
 
   const phaseDur = () => (scene.phases[phase].dur || 5200) + scene.phases[phase].caption.length * 18;
 
-  function open(sc0, onClose) {
+  function open(sc0, onClose, opts) {
     if (!root) build();
     scene = sc0;
     onCloseCb = onClose;
+    autoClose = !!(opts && opts.autoClose);
+    clearTimeout(closeTimer);
     camX = null; manualUntil = 0;
     titleEl.textContent = scene.title;
     metaEl.textContent = `${scene.date} · ${scene.place}`;
@@ -169,6 +177,7 @@ window.Battle = (() => {
   }
 
   function close() {
+    clearTimeout(closeTimer);
     if (!root || root.hidden) return;
     root.hidden = true;
     document.body.classList.remove("battle-open");
@@ -214,7 +223,7 @@ window.Battle = (() => {
     draw(now / 1000, dt);
     if (playing && e > phaseDur()) {
       if (phase < scene.phases.length - 1) go(phase + 1);
-      else setPlaying(false);
+      else { setPlaying(false); if (autoClose) closeTimer = setTimeout(close, 1500); }
     }
     raf = requestAnimationFrame(frame);
   }
@@ -234,10 +243,13 @@ window.Battle = (() => {
         const seed = (u.id.length * 31 + n * 7) % 997;
         const fx = (c - (cols - 1) / 2) * dx * spread + (rnd(seed) - 0.5) * dx * 0.35;
         const fy = (r - (rows - 1) / 2) * dy * spread + (rnd(seed + 1) - 0.5) * dy * 0.4;
-        out.push({ x: u.x + fx, y: u.y + fy, kind: kinds[n % kinds.length], seed });
+        let kind = kinds[n % kinds.length];
+        if (kind === "king" && (n > 0 || d.leader)) kind = "knight";
+        out.push({ x: u.x + fx, y: u.y + fy, kind, seed });
       }
     }
-    if (d.leader) out.push({ x: u.x + ((cols + 1) / 2) * dx * 0.55 * (u.facing || 1), y: u.y - 0.4, kind: "leader", seed: 5, lead: true });
+    const MOUNTED_LEAD = ["knight", "foot", "archer", "crossbow", "horsearcher", "templar", "hospitaller", "king"];
+    if (d.leader && MOUNTED_LEAD.includes(d.kind)) out.push({ x: u.x + ((cols + 1) / 2) * dx * 0.55 * (u.facing || 1), y: u.y - 0.4, kind: d.kind === "king" ? "king" : "leader", seed: 5, lead: true });
     return out;
   }
 
@@ -250,7 +262,7 @@ window.Battle = (() => {
   function drawUnit(u, time, list) {
     if (u.alpha <= 0.01) return;
     const d = u.def;
-    const s = sc * (d.kind === "siegetower" ? 5.2 : d.kind === "ram" ? 3.6 : 3.1);
+    const s = sc * (SIZE[d.kind] || 3.1);
     const fighting = u.state === "fight" && !u.walking;
     for (const f of unitFigures(u)) {
       const jig = fighting ? Math.sin(time * 5 + f.seed) * 0.35 * (u.facing || 1) : 0;
@@ -266,6 +278,7 @@ window.Battle = (() => {
           fighting,
           bridge: fighting,
           halo: f.kind === "saint",
+          mark: d.device, color2: d.color2,
           coat: f.kind === "saint" ? "#f6f2e8" : d.side === "foe" && f.seed % 3 === 0 ? "#d9cdb8" : undefined,
           alpha: u.alpha * (f.kind === "saint" ? 0.9 : 1),
         }),
@@ -278,7 +291,7 @@ window.Battle = (() => {
     const d = u.def;
     const rows = d.rows || 1;
     const [, dy] = SPACING[(d.mix || [d.kind])[0]] || [2.4, 1.8];
-    const s = sc * (d.kind === "siegetower" ? 5.2 : 3.1);
+    const s = sc * (SIZE[d.kind] || 3.1);
     const x = X(u.x), y = Y(u.y - ((rows - 1) / 2) * dy) - s * 1.25 - 6;
     const fs = Math.max(10, Math.min(14, sc * 1.25));
     ctx.font = `700 ${fs}px "Alegreya Sans SC", "Gill Sans", sans-serif`;
@@ -294,11 +307,17 @@ window.Battle = (() => {
     ctx.lineWidth = 3.5; ctx.strokeStyle = P.vellum; ctx.lineJoin = "round";
     ctx.globalAlpha = u.alpha;
     ctx.strokeText(d.label, bx, by);
-    ctx.fillStyle = d.side === "foe" ? P.soft : d.labelColor || shade(d.color);
+    ctx.fillStyle = d.labelColor || (d.side === "foe" ? P.soft : readable(d.color));
     ctx.fillText(d.label, bx, by);
     ctx.globalAlpha = 1;
   }
-  const shade = (c) => c;
+  // Light unit colors (white surcoats, robes) fall back to ink for their label.
+  function readable(c) {
+    if (!c || c[0] !== "#") return P.ink;
+    const n = parseInt(c.slice(1).padEnd(6, "0").slice(0, 6), 16);
+    const l = (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
+    return l > 0.62 ? P.ink : c;
+  }
 
   // ---------- effects ----------
   function footprint(u) {
@@ -435,6 +454,27 @@ window.Battle = (() => {
       }
     }
     for (const t of T) {
+      if (t.type === "desert") {
+        polyPath(c, t.poly, true); c.fillStyle = "#e9d7a8"; c.fill();
+        c.save(); polyPath(c, t.poly, true); c.clip();
+        c.strokeStyle = "rgba(150,115,60,.45)"; c.lineWidth = 1;
+        const xs = t.poly.map((p) => p[0]), ys = t.poly.map((p) => p[1]);
+        for (let y = Math.min(...ys) + 2; y < Math.max(...ys); y += 3.2) {
+          for (let x = Math.min(...xs) + ((y * 11) % 9); x < Math.max(...xs); x += 9) {
+            c.beginPath(); c.moveTo(X(x), Y(y)); c.quadraticCurveTo(X(x + 2), Y(y - 1.2), X(x + 4), Y(y)); c.stroke();
+          }
+        }
+        c.restore();
+      } else if (t.type === "floor") {
+        polyPath(c, t.poly, true); c.fillStyle = "#e3d3b0"; c.fill();
+        c.save(); polyPath(c, t.poly, true); c.clip();
+        c.strokeStyle = "rgba(110,85,50,.35)"; c.lineWidth = 1;
+        for (let x = -60; x < 160; x += 4) { c.beginPath(); c.moveTo(X(x), Y(0)); c.lineTo(X(x + 62), Y(62)); c.stroke(); c.beginPath(); c.moveTo(X(x + 62), Y(0)); c.lineTo(X(x), Y(62)); c.stroke(); }
+        c.restore();
+        polyPath(c, t.poly, true); c.strokeStyle = P.ink; c.lineWidth = 1.5; c.stroke();
+      }
+    }
+    for (const t of T) {
       if (t.type === "hills") {
         const [x, y] = t.at, w = t.w, h = t.h;
         c.beginPath(); c.moveTo(X(x - w / 2), Y(y + h / 2));
@@ -504,6 +544,26 @@ window.Battle = (() => {
           pts.push([t.at[0] + Math.cos(a) * t.r * (0.6 + rnd(i) * 0.4), t.at[1] + Math.sin(a) * t.r * 0.45 * (0.6 + rnd(i + 9) * 0.4)]);
         }
         pts.sort((a, b) => a[1] - b[1]).forEach(([x, y]) => drawTent(c, x, y, t.color));
+      } else if (t.type === "columns") {
+        const n = t.n || 6;
+        for (let i = 0; i < n; i++) {
+          const f = n === 1 ? 0 : i / (n - 1);
+          const x = t.from[0] + (t.to[0] - t.from[0]) * f, y = t.from[1] + (t.to[1] - t.from[1]) * f;
+          const h = sc * 7, w = sc * 1.1;
+          c.beginPath(); c.rect(X(x) - w / 2, Y(y) - h, w, h); c.fillStyle = P.wall; c.fill(); c.strokeStyle = P.ink; c.lineWidth = 1.2; c.stroke();
+          c.beginPath(); c.rect(X(x) - w * 0.8, Y(y) - h - sc * 0.6, w * 1.6, sc * 0.6); c.fill(); c.stroke();
+          if (i < n - 1) {
+            const nx = t.from[0] + (t.to[0] - t.from[0]) * ((i + 1) / (n - 1)), ny = t.from[1] + (t.to[1] - t.from[1]) * ((i + 1) / (n - 1));
+            const mx = (X(x) + X(nx)) / 2, my = (Y(y) + Y(ny)) / 2 - h - sc * 0.6;
+            c.beginPath(); c.moveTo(X(x), Y(y) - h - sc * 0.6); c.quadraticCurveTo(mx, my - sc * 3, X(nx), Y(ny) - h - sc * 0.6); c.lineWidth = sc * 0.5; c.strokeStyle = P.ink; c.stroke();
+            c.lineWidth = sc * 0.3; c.strokeStyle = P.wall; c.stroke();
+          }
+        }
+      } else if (t.type === "dais") {
+        const [x, y] = t.at, w = t.w || 14, h = t.h || 4;
+        c.beginPath(); c.rect(X(x - w / 2), Y(y - h / 2), w * sc, h * sc); c.fillStyle = "#d9c49a"; c.fill(); c.strokeStyle = P.ink; c.lineWidth = 1.4; c.stroke();
+        c.beginPath(); c.rect(X(x - w / 2), Y(y + h / 2) - sc * 0.8, w * sc, sc * 0.8); c.fillStyle = "#a8301d"; c.fill(); c.stroke();
+        for (let i = 1; i < 3; i++) { c.beginPath(); c.moveTo(X(x - w / 2), Y(y + h / 2) + i * sc * 0.6); c.lineTo(X(x + w / 2), Y(y + h / 2) + i * sc * 0.6); c.strokeStyle = P.soft; c.lineWidth = 1; c.stroke(); }
       } else if (t.type === "landmark") {
         Sprites.landmark(c, t.kind, X(t.at[0]), Y(t.at[1]), sc * (t.size || 6));
       }

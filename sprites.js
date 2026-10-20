@@ -110,8 +110,10 @@ window.Sprites = (() => {
     ctx.beginPath();
     ctx.moveTo(-0.1 * s, y0); ctx.lineTo(0.1 * s, y0); ctx.lineTo(0.07 * s, y0 - 0.33 * s); ctx.lineTo(-0.07 * s, y0 - 0.33 * s); ctx.closePath();
     fill(ctx, o.mail ? STEEL : o.color, lw);
+    if (o.chest) cross(ctx, 0, y0 - 0.17 * s, 0.09 * s, o.chest, Math.max(1, s * 0.035));
     head(ctx, 0.01 * s, y0 - 0.41 * s, 0.075 * s, lw);
-    helmet(ctx, 0.01 * s, y0 - 0.42 * s, 0.075 * s, lw, o.foe ? "spike" : "cone");
+    if (o.crown) crown(ctx, 0.01 * s, y0 - 0.47 * s, 0.08 * s, lw);
+    else helmet(ctx, 0.01 * s, y0 - 0.42 * s, 0.075 * s, lw, o.foe ? "spike" : "cone");
     if (o.foe) {
       // bow held forward
       ctx.beginPath(); ctx.arc(0.16 * s, y0 - 0.2 * s, 0.17 * s, -1.25, 1.25); stroke(ctx, Math.max(1, s * 0.04));
@@ -210,7 +212,8 @@ window.Sprites = (() => {
     for (let u = 0; u <= 1.001; u += 0.25) ctx.lineTo(px - u * 0.55 * s, top + wave(u));
     for (let u = 1; u >= -0.001; u -= 0.25) ctx.lineTo(px - u * 0.55 * s, top + 0.36 * s + wave(u));
     ctx.closePath(); fill(ctx, o.color, lw);
-    if (!o.foe) cross(ctx, px - 0.27 * s, top + 0.2 * s + wave(0.5), 0.12 * s, o.emblem || "#f4ead2", Math.max(1.4, s * 0.05));
+    if (o.mark) emblemMark(ctx, o.mark, px - 0.27 * s, top + 0.18 * s + wave(0.5), 0.13 * s, o.color2 || GOLD, lw);
+    else if (!o.foe) cross(ctx, px - 0.27 * s, top + 0.2 * s + wave(0.5), 0.12 * s, o.emblem || "#f4ead2", Math.max(1.4, s * 0.05));
     knight(ctx, s, { ...o, mail: !o.foe, shield: o.foe ? undefined : o.color });
   }
 
@@ -261,8 +264,308 @@ window.Sprites = (() => {
     ctx.restore();
   }
 
+
+  function crown(ctx, cx, base, r, lw) {
+    ctx.beginPath();
+    ctx.moveTo(cx - r, base); ctx.lineTo(cx - r, base - r * 0.9); ctx.lineTo(cx - r * 0.5, base - r * 0.45);
+    ctx.lineTo(cx, base - r * 1.1); ctx.lineTo(cx + r * 0.5, base - r * 0.45); ctx.lineTo(cx + r, base - r * 0.9); ctx.lineTo(cx + r, base);
+    ctx.closePath(); fill(ctx, GOLD, lw * 0.8);
+  }
+
+  // Small devices for banners, shields and portraits.
+  function emblemMark(ctx, kind, x, y, r, color, lw) {
+    ctx.save();
+    if (kind === "lions") {
+      for (const dy of [-0.45, 0.35]) {
+        ctx.beginPath(); ctx.ellipse(x, y + dy * r, r * 0.55, r * 0.2, 0, 0, Math.PI * 2); fill(ctx, color, lw * 0.5);
+        ctx.beginPath(); ctx.arc(x + r * 0.55, y + dy * r - r * 0.12, r * 0.16, 0, Math.PI * 2); fill(ctx, color, lw * 0.5);
+      }
+    } else if (kind === "lilies") {
+      for (const [dx, dy] of [[-0.5, -0.4], [0.5, -0.4], [0, 0.45]]) {
+        const cx = x + dx * r, cy = y + dy * r, q = r * 0.22;
+        ctx.beginPath(); ctx.ellipse(cx, cy - q, q * 0.45, q, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx - q * 0.8, cy, q * 0.4, q * 0.7, -0.8, 0, Math.PI * 2);
+        ctx.ellipse(cx + q * 0.8, cy, q * 0.4, q * 0.7, 0.8, 0, Math.PI * 2);
+        ctx.fillStyle = color; ctx.fill();
+      }
+    } else if (kind === "eagle") {
+      ctx.beginPath();
+      ctx.moveTo(x, y - r * 0.7); ctx.lineTo(x + r * 0.15, y - r * 0.2); ctx.lineTo(x + r * 0.85, y - r * 0.45); ctx.lineTo(x + r * 0.3, y + r * 0.15);
+      ctx.lineTo(x + r * 0.25, y + r * 0.7); ctx.lineTo(x, y + r * 0.4); ctx.lineTo(x - r * 0.25, y + r * 0.7); ctx.lineTo(x - r * 0.3, y + r * 0.15);
+      ctx.lineTo(x - r * 0.85, y - r * 0.45); ctx.lineTo(x - r * 0.15, y - r * 0.2); ctx.closePath();
+      ctx.fillStyle = INK; ctx.fill();
+    } else if (kind === "keys") {
+      for (const a of [-0.6, 0.6]) {
+        ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+        ctx.beginPath(); ctx.moveTo(0, -r * 0.8); ctx.lineTo(0, r * 0.6); ctx.strokeStyle = color; ctx.lineWidth = Math.max(1, r * 0.14); ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, r * 0.75, r * 0.18, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, -r * 0.8); ctx.lineTo(r * 0.25, -r * 0.8); ctx.moveTo(0, -r * 0.6); ctx.lineTo(r * 0.2, -r * 0.6); ctx.stroke();
+        ctx.restore();
+      }
+    } else if (kind === "templar") {
+      cross(ctx, x, y + r * 0.2, r * 0.75, "#a8301d", Math.max(1.4, r * 0.28));
+    } else if (kind === "hospitaller") {
+      cross(ctx, x, y + r * 0.2, r * 0.75, "#f4ead2", Math.max(1.4, r * 0.28));
+    } else if (kind !== "none") {
+      cross(ctx, x, y + r * 0.2, r * 0.75, color, Math.max(1.4, r * 0.22));
+    }
+    ctx.restore();
+  }
+
+  function robe(ctx, s, hip, sh, color, lw, wide) {
+    const w = wide || 0.17;
+    ctx.beginPath();
+    ctx.moveTo(-w * s, -0.04 * s); ctx.lineTo(w * s, -0.04 * s); ctx.lineTo(0.08 * s, sh); ctx.lineTo(-0.08 * s, sh); ctx.closePath();
+    fill(ctx, color, lw);
+  }
+
+  function arm(ctx, s, sh, raised, t, lw) {
+    const a = raised ? -1.9 + Math.sin(t * 1.5) * 0.25 : 0.35;
+    ctx.beginPath(); ctx.moveTo(0.04 * s, sh + 0.05 * s);
+    ctx.lineTo(0.04 * s + Math.cos(a) * 0.28 * s, sh + 0.05 * s + Math.sin(a) * 0.28 * s);
+    stroke(ctx, Math.max(1.2, s * 0.06));
+    ctx.beginPath(); ctx.arc(0.04 * s + Math.cos(a) * 0.3 * s, sh + 0.05 * s + Math.sin(a) * 0.3 * s, 0.035 * s, 0, Math.PI * 2); fill(ctx, SKIN, lw * 0.6);
+  }
+
+  function pope(ctx, s, o) {
+    walker(ctx, s, { ...o, gait: o.gait * 0.5 }, (hip, lw) => {
+      const sh = hip - 0.4 * s;
+      // processional cross staff
+      ctx.beginPath(); ctx.moveTo(-0.16 * s, 0); ctx.lineTo(-0.16 * s, sh - 0.4 * s); stroke(ctx, Math.max(1, s * 0.035));
+      cross(ctx, -0.16 * s, sh - 0.48 * s, 0.1 * s, GOLD, Math.max(1.2, s * 0.04));
+      robe(ctx, s, hip, sh, "#f6f1e4", lw, 0.2);
+      ctx.beginPath(); ctx.moveTo(-0.15 * s, hip + 0.05 * s); ctx.lineTo(0.15 * s, hip + 0.05 * s); ctx.lineTo(0.09 * s, sh); ctx.lineTo(-0.09 * s, sh); ctx.closePath();
+      fill(ctx, "#a8301d", lw);
+      // pallium
+      ctx.beginPath(); ctx.moveTo(-0.07 * s, sh + 0.02 * s); ctx.lineTo(0, sh + 0.1 * s); ctx.lineTo(0.07 * s, sh + 0.02 * s); ctx.moveTo(0, sh + 0.1 * s); ctx.lineTo(0, hip);
+      ctx.strokeStyle = "#f6f1e4"; ctx.lineWidth = Math.max(1.2, s * 0.04); ctx.stroke();
+      arm(ctx, s, sh, o.fighting, o.t, lw);
+      head(ctx, 0, sh - 0.08 * s, 0.08 * s, lw);
+      // conical papal cap with a gold band
+      ctx.beginPath(); ctx.moveTo(-0.075 * s, sh - 0.11 * s); ctx.quadraticCurveTo(0, sh - 0.42 * s, 0.075 * s, sh - 0.11 * s); ctx.closePath(); fill(ctx, "#f6f1e4", lw);
+      ctx.beginPath(); ctx.rect(-0.075 * s, sh - 0.15 * s, 0.15 * s, 0.04 * s); fill(ctx, GOLD, lw * 0.6);
+    });
+  }
+
+  function bishop(ctx, s, o) {
+    walker(ctx, s, { ...o, gait: o.gait * 0.6 }, (hip, lw) => {
+      const sh = hip - 0.38 * s;
+      // crozier
+      ctx.beginPath(); ctx.moveTo(0.18 * s, 0); ctx.lineTo(0.18 * s, sh - 0.3 * s); ctx.arc(0.23 * s, sh - 0.3 * s, 0.05 * s, Math.PI, Math.PI * 2.6);
+      ctx.strokeStyle = GOLD; ctx.lineWidth = Math.max(1, s * 0.04); ctx.stroke();
+      robe(ctx, s, hip, sh, "#f6f1e4", lw);
+      ctx.beginPath(); ctx.moveTo(-0.14 * s, hip); ctx.quadraticCurveTo(0, hip + 0.1 * s, 0.14 * s, hip); ctx.lineTo(0.08 * s, sh); ctx.lineTo(-0.08 * s, sh); ctx.closePath();
+      fill(ctx, o.color || "#94701f", lw);
+      cross(ctx, 0, hip - 0.18 * s, 0.07 * s, GOLD, lw);
+      if (o.fighting) arm(ctx, s, sh, true, o.t, lw);
+      head(ctx, 0, sh - 0.08 * s, 0.08 * s, lw);
+      // low two-horned mitre
+      ctx.beginPath(); ctx.moveTo(-0.08 * s, sh - 0.12 * s); ctx.lineTo(-0.08 * s, sh - 0.24 * s); ctx.lineTo(0, sh - 0.17 * s); ctx.lineTo(0.08 * s, sh - 0.24 * s); ctx.lineTo(0.08 * s, sh - 0.12 * s); ctx.closePath();
+      fill(ctx, "#f6f1e4", lw);
+    });
+  }
+
+  function priest(ctx, s, o) {
+    walker(ctx, s, { ...o, gait: o.gait * 0.6 }, (hip, lw) => {
+      const sh = hip - 0.36 * s;
+      if (o.seed % 2 === 0) {
+        ctx.beginPath(); ctx.moveTo(0.15 * s, 0.02 * s); ctx.lineTo(0.15 * s, sh - 0.42 * s); stroke(ctx, Math.max(1, s * 0.035));
+        cross(ctx, 0.15 * s, sh - 0.5 * s, 0.12 * s, GOLD, Math.max(1.3, s * 0.045));
+      }
+      robe(ctx, s, hip, sh, o.color && o.color !== "#a8301d" ? o.color : "#4a3b2c", lw);
+      ctx.beginPath(); ctx.rect(-0.05 * s, sh + 0.02 * s, 0.1 * s, (hip - sh) * 0.9); fill(ctx, "#f6f1e4", lw * 0.6);
+      if (o.seed % 2 === 1) { ctx.beginPath(); ctx.rect(0.06 * s, hip - 0.25 * s, 0.1 * s, 0.08 * s); fill(ctx, "#a8301d", lw * 0.7); }
+      if (o.fighting) arm(ctx, s, sh, true, o.t + o.seed, lw);
+      head(ctx, 0, sh - 0.08 * s, 0.08 * s, lw);
+      ctx.beginPath(); ctx.arc(0, sh - 0.11 * s, 0.085 * s, Math.PI * 1.05, Math.PI * 1.95); ctx.strokeStyle = "#4a3426"; ctx.lineWidth = Math.max(1, s * 0.03); ctx.stroke();
+    });
+  }
+
+  const CROWD = ["#9c8463", "#7d5b3a", "#5f6e4a", "#8a6a8a", "#6f7f91", "#a8744a", "#c2a878", "#7a4b3b"];
+  function crowdFig(ctx, s, o) {
+    walker(ctx, s, { ...o, gait: o.gait * 0.8 }, (hip, lw) => {
+      const sh = hip - 0.34 * s;
+      const c = CROWD[o.seed % CROWD.length];
+      const woman = o.seed % 3 === 0;
+      if (woman) { ctx.beginPath(); ctx.moveTo(-0.16 * s, -0.04 * s); ctx.lineTo(0.16 * s, -0.04 * s); ctx.lineTo(0.08 * s, sh); ctx.lineTo(-0.08 * s, sh); ctx.closePath(); fill(ctx, c, lw); }
+      else { ctx.beginPath(); ctx.moveTo(-0.13 * s, hip + 0.1 * s); ctx.lineTo(0.13 * s, hip + 0.1 * s); ctx.lineTo(0.08 * s, sh); ctx.lineTo(-0.08 * s, sh); ctx.closePath(); fill(ctx, c, lw); }
+      if (o.cross || o.seed % 4 === 1) cross(ctx, -0.02 * s, sh + 0.12 * s, 0.06 * s, "#a8301d", lw * 1.2);
+      arm(ctx, s, sh, o.fighting && o.seed % 2 === 0, o.t + o.seed, lw);
+      head(ctx, 0, sh - 0.08 * s, 0.08 * s, lw);
+      if (woman) {
+        ctx.beginPath(); ctx.arc(0, sh - 0.09 * s, 0.1 * s, Math.PI, 0); ctx.lineTo(0.1 * s, sh); ctx.lineTo(-0.1 * s, sh); ctx.closePath(); fill(ctx, "#efe7d6", lw);
+      } else if (o.seed % 5 === 2) {
+        ctx.beginPath(); ctx.arc(0, sh - 0.11 * s, 0.085 * s, Math.PI, 0); ctx.closePath(); fill(ctx, "#5c4630", lw);
+      }
+    });
+  }
+
+  function crossbow(ctx, s, o) {
+    walker(ctx, s, o, (hip, lw) => {
+      const sh = hip - 0.36 * s;
+      ctx.beginPath(); ctx.moveTo(-0.13 * s, hip + 0.08 * s); ctx.lineTo(0.13 * s, hip + 0.08 * s); ctx.lineTo(0.08 * s, sh); ctx.lineTo(-0.08 * s, sh); ctx.closePath();
+      fill(ctx, o.color, lw);
+      if (!o.foe) cross(ctx, -0.01 * s, hip - 0.18 * s, 0.06 * s, "#f4ead2", lw);
+      head(ctx, 0, sh - 0.08 * s, 0.08 * s, lw);
+      // kettle helmet
+      ctx.beginPath(); ctx.arc(0, sh - 0.11 * s, 0.085 * s, Math.PI, 0); ctx.lineTo(0.13 * s, sh - 0.1 * s); ctx.lineTo(-0.13 * s, sh - 0.1 * s); ctx.closePath(); fill(ctx, STEEL, lw);
+      const aim = o.fighting ? -0.12 + Math.sin(o.t * 1.3) * 0.05 : 0.5;
+      ctx.save(); ctx.translate(0.05 * s, sh + 0.08 * s); ctx.rotate(aim);
+      ctx.beginPath(); ctx.moveTo(-0.08 * s, 0); ctx.lineTo(0.32 * s, 0); stroke(ctx, Math.max(1.2, s * 0.05));
+      ctx.beginPath(); ctx.moveTo(0.28 * s, -0.13 * s); ctx.quadraticCurveTo(0.34 * s, 0, 0.28 * s, 0.13 * s); stroke(ctx, Math.max(1, s * 0.035));
+      ctx.restore();
+    });
+  }
+
+  function ship(ctx, s, o) {
+    const lw = Math.max(1, s * 0.025);
+    const bob = Math.sin(o.t * 0.5 + o.seed) * 0.03 * s;
+    ctx.save(); ctx.translate(0, bob);
+    // hull
+    ctx.beginPath();
+    ctx.moveTo(-0.6 * s, -0.32 * s); ctx.quadraticCurveTo(-0.5 * s, 0, -0.2 * s, 0); ctx.lineTo(0.25 * s, 0);
+    ctx.quadraticCurveTo(0.55 * s, 0, 0.65 * s, -0.34 * s); ctx.lineTo(0.42 * s, -0.24 * s); ctx.lineTo(-0.4 * s, -0.24 * s); ctx.closePath();
+    fill(ctx, o.foe ? "#7a6a52" : WOOD, lw);
+    ctx.beginPath(); ctx.moveTo(-0.45 * s, -0.14 * s); ctx.lineTo(0.48 * s, -0.14 * s); ctx.strokeStyle = WOOD_DARK; ctx.lineWidth = lw; ctx.stroke();
+    // shields along the rail
+    for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.arc(-0.3 * s + i * 0.15 * s, -0.27 * s, 0.045 * s, 0, Math.PI * 2); fill(ctx, i % 2 ? o.color : "#efe2c4", lw * 0.5); }
+    // mast and sail
+    ctx.beginPath(); ctx.moveTo(0, -0.24 * s); ctx.lineTo(0, -1.05 * s); stroke(ctx, Math.max(1.2, s * 0.03));
+    const billow = Math.sin(o.t * 0.8) * 0.02 * s;
+    ctx.beginPath(); ctx.moveTo(-0.3 * s, -0.95 * s); ctx.lineTo(0.3 * s, -0.95 * s); ctx.quadraticCurveTo(0.36 * s + billow, -0.65 * s, 0.3 * s, -0.4 * s);
+    ctx.lineTo(-0.3 * s, -0.4 * s); ctx.quadraticCurveTo(-0.24 * s + billow, -0.65 * s, -0.3 * s, -0.95 * s); ctx.closePath();
+    fill(ctx, o.foe ? "#efe7d6" : "#f4ead2", lw);
+    if (!o.foe) cross(ctx, 0.02 * s, -0.68 * s, 0.17 * s, o.color, Math.max(1.5, s * 0.05));
+    else { ctx.beginPath(); ctx.rect(-0.3 * s, -0.75 * s, 0.6 * s, 0.07 * s); ctx.fillStyle = o.color; ctx.fill(); }
+    // pennant
+    ctx.beginPath(); ctx.moveTo(0, -1.05 * s); ctx.lineTo(-0.2 * s, -1.0 * s + Math.sin(o.t * 2) * 0.02 * s); ctx.lineTo(0, -0.97 * s); fill(ctx, o.color, lw * 0.6);
+    ctx.restore();
+    // water line
+    ctx.beginPath();
+    for (let x = -0.7; x <= 0.7; x += 0.2) { ctx.moveTo(x * s, 0.02 * s); ctx.quadraticCurveTo((x + 0.05) * s, -0.02 * s, (x + 0.1) * s, 0.02 * s); }
+    ctx.strokeStyle = "#7f988c"; ctx.lineWidth = lw; ctx.stroke();
+  }
+
+  function trebuchet(ctx, s, o) {
+    const lw = Math.max(1, s * 0.03);
+    // frame
+    ctx.beginPath(); ctx.moveTo(-0.4 * s, 0); ctx.lineTo(0, -0.62 * s); ctx.lineTo(0.4 * s, 0);
+    ctx.moveTo(-0.5 * s, 0); ctx.lineTo(0.5 * s, 0);
+    ctx.strokeStyle = WOOD_DARK; ctx.lineWidth = Math.max(2, s * 0.06); ctx.stroke();
+    // beam swings when firing
+    const cyc = o.fighting ? (o.t * 0.35 + o.seed) % (Math.PI * 2) : 0;
+    const ang = o.fighting ? -0.9 + Math.max(0, Math.sin(cyc)) * 2.1 : -0.9;
+    const px = 0, py = -0.62 * s;
+    const lx = px + Math.cos(Math.PI + ang) * 0.75 * s, ly = py + Math.sin(Math.PI + ang) * 0.75 * s;
+    const sx = px + Math.cos(ang) * 0.32 * s, sy = py + Math.sin(ang) * 0.32 * s;
+    ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(sx, sy); ctx.strokeStyle = WOOD; ctx.lineWidth = Math.max(2, s * 0.05); ctx.stroke();
+    // counterweight box
+    ctx.beginPath(); ctx.rect(sx - 0.1 * s, sy, 0.2 * s, 0.2 * s); fill(ctx, WOOD_DARK, lw);
+    // sling
+    ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx - 0.05 * s, ly + 0.2 * s); ctx.strokeStyle = INK; ctx.lineWidth = lw * 0.7; ctx.stroke();
+    ctx.beginPath(); ctx.arc(lx - 0.05 * s, ly + 0.22 * s, 0.04 * s, 0, Math.PI * 2); fill(ctx, "#8b8170", lw * 0.5);
+    ctx.beginPath(); ctx.arc(0, -0.62 * s, 0.03 * s, 0, Math.PI * 2); fill(ctx, INK, 0);
+  }
+
+  const king = (ctx, s, o) => leader(ctx, s, { ...o, crown: true, mark: o.mark || o.device });
+  const templar = (ctx, s, o) => knight(ctx, s, { ...o, color: "#f2ede0", shield: "#f2ede0", emblem: "#a8301d", chest: "#a8301d" });
+  const hospitaller = (ctx, s, o) => knight(ctx, s, { ...o, color: "#2a2622", shield: "#2a2622", emblem: "#f4ead2", chest: "#f4ead2" });
+
+  // ---------- portraits: a bust in a roundel ----------
+  function portrait(ctx, p, x, y, r) {
+    p = p || {};
+    const c1 = p.color || "#a8301d", c2 = p.color2 || GOLD;
+    const lw = Math.max(1, r * 0.04);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fillStyle = "#efe2c4"; ctx.fill();
+    ctx.save(); ctx.clip();
+    // ground stripes like a tapestry backdrop
+    ctx.fillStyle = "#e3d2ab"; ctx.fillRect(-r, r * 0.25, r * 2, r);
+    const k = p.kind || "knight";
+    // shoulders
+    const garment = k === "templar" ? "#f2ede0" : k === "monk" || k === "hermit" ? (p.color || "#6f5a3e") : c1;
+    ctx.beginPath(); ctx.moveTo(-r * 0.85, r * 1.05); ctx.quadraticCurveTo(-r * 0.75, r * 0.3, 0, r * 0.25); ctx.quadraticCurveTo(r * 0.75, r * 0.3, r * 0.85, r * 1.05); ctx.closePath();
+    fill(ctx, garment, lw);
+    if (k === "emperor") {
+      ctx.beginPath(); ctx.moveTo(-r * 0.12, r * 0.28); ctx.lineTo(-r * 0.12, r); ctx.lineTo(r * 0.12, r); ctx.lineTo(r * 0.12, r * 0.28); ctx.closePath(); fill(ctx, GOLD, lw * 0.6);
+      for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(0, r * (0.42 + i * 0.18), r * 0.04, 0, Math.PI * 2); ctx.fillStyle = "#a8301d"; ctx.fill(); }
+    }
+    if (k === "pope") {
+      ctx.beginPath(); ctx.moveTo(-r * 0.4, r * 0.32); ctx.lineTo(0, r * 0.55); ctx.lineTo(r * 0.4, r * 0.32); ctx.moveTo(0, r * 0.55); ctx.lineTo(0, r);
+      ctx.strokeStyle = "#f6f1e4"; ctx.lineWidth = r * 0.12; ctx.stroke();
+      cross(ctx, 0, r * 0.8, r * 0.06, INK, lw);
+    }
+    if (k === "templar" || k === "knight" || k === "king") {
+      // mail at the neck for fighting men
+      if (k !== "king") { ctx.beginPath(); ctx.arc(0, r * 0.22, r * 0.3, 0, Math.PI); fill(ctx, STEEL, lw); }
+    }
+    const em = p.emblem || (k === "templar" ? "templar" : k === "pope" ? "keys" : k === "sultan" || k === "queen" || k === "monk" || k === "hermit" ? "none" : "cross");
+    if (em !== "none" && k !== "pope") emblemMark(ctx, em, 0, r * 0.62, r * 0.24, k === "templar" ? "#a8301d" : c2, lw);
+    if (k === "pope") emblemMark(ctx, "keys", r * 0.45, r * 0.65, r * 0.18, GOLD, lw);
+    // neck and head
+    ctx.beginPath(); ctx.rect(-r * 0.1, r * 0.05, r * 0.2, r * 0.25); fill(ctx, SKIN, lw);
+    ctx.beginPath(); ctx.ellipse(0, -r * 0.12, r * 0.27, r * 0.32, 0, 0, Math.PI * 2); fill(ctx, SKIN, lw);
+    // eyes, nose, mouth
+    ctx.fillStyle = INK;
+    ctx.beginPath(); ctx.arc(-r * 0.1, -r * 0.16, r * 0.03, 0, Math.PI * 2); ctx.arc(r * 0.1, -r * 0.16, r * 0.03, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(0, -r * 0.14); ctx.lineTo(-r * 0.03, -r * 0.03); ctx.lineTo(r * 0.02, -r * 0.02); ctx.strokeStyle = INK; ctx.lineWidth = lw * 0.6; ctx.stroke();
+    if (p.beard || k === "hermit") {
+      ctx.beginPath(); ctx.moveTo(-r * 0.25, -r * 0.08); ctx.quadraticCurveTo(-r * 0.22, r * (k === "hermit" ? 0.45 : 0.25), 0, r * (k === "hermit" ? 0.5 : 0.28));
+      ctx.quadraticCurveTo(r * 0.22, r * (k === "hermit" ? 0.45 : 0.25), r * 0.25, -r * 0.08); ctx.lineTo(r * 0.12, r * 0.02); ctx.lineTo(-r * 0.12, r * 0.02); ctx.closePath();
+      fill(ctx, p.hair || (k === "hermit" ? "#c9c0b0" : "#6b4a2b"), lw * 0.7);
+    } else {
+      ctx.beginPath(); ctx.moveTo(-r * 0.06, r * 0.05); ctx.lineTo(r * 0.06, r * 0.05); ctx.stroke();
+    }
+    // headwear
+    const hair = p.hair || "#5c4027";
+    if (k === "king" || k === "queen" || k === "emperor") {
+      if (k === "queen") {
+        ctx.beginPath(); ctx.arc(0, -r * 0.18, r * 0.33, Math.PI * 1.02, Math.PI * 1.98); ctx.lineTo(r * 0.36, r * 0.3); ctx.lineTo(r * 0.26, r * 0.3); ctx.lineTo(r * 0.24, -r * 0.1);
+        ctx.quadraticCurveTo(0, -r * 0.38, -r * 0.24, -r * 0.1); ctx.lineTo(-r * 0.26, r * 0.3); ctx.lineTo(-r * 0.36, r * 0.3); ctx.closePath(); fill(ctx, "#f4efe3", lw);
+      } else {
+        ctx.beginPath(); ctx.arc(0, -r * 0.2, r * 0.28, Math.PI, 0); ctx.closePath(); fill(ctx, hair, lw * 0.7);
+      }
+      ctx.beginPath();
+      const b = -r * 0.36, w = r * 0.3;
+      ctx.moveTo(-w, b); ctx.lineTo(-w, b - r * 0.2); ctx.lineTo(-w * 0.5, b - r * 0.1); ctx.lineTo(0, b - r * 0.26); ctx.lineTo(w * 0.5, b - r * 0.1); ctx.lineTo(w, b - r * 0.2); ctx.lineTo(w, b); ctx.closePath();
+      fill(ctx, GOLD, lw);
+      if (k === "emperor") {
+        for (const sx of [-1, 1]) { ctx.beginPath(); ctx.moveTo(sx * w * 0.95, b); ctx.lineTo(sx * w * 0.95, b + r * 0.32); ctx.strokeStyle = GOLD; ctx.lineWidth = lw * 1.4; ctx.stroke(); }
+        ctx.beginPath(); ctx.arc(0, b - r * 0.12, r * 0.04, 0, Math.PI * 2); ctx.fillStyle = "#a8301d"; ctx.fill();
+      }
+    } else if (k === "pope") {
+      ctx.beginPath(); ctx.moveTo(-r * 0.27, -r * 0.3); ctx.quadraticCurveTo(0, -r * 1.2, r * 0.27, -r * 0.3); ctx.closePath(); fill(ctx, "#f6f1e4", lw);
+      ctx.beginPath(); ctx.rect(-r * 0.27, -r * 0.4, r * 0.54, r * 0.09); fill(ctx, GOLD, lw * 0.7);
+    } else if (k === "bishop") {
+      ctx.beginPath(); ctx.moveTo(-r * 0.27, -r * 0.32); ctx.lineTo(-r * 0.27, -r * 0.72); ctx.lineTo(0, -r * 0.52); ctx.lineTo(r * 0.27, -r * 0.72); ctx.lineTo(r * 0.27, -r * 0.32); ctx.closePath();
+      fill(ctx, "#f6f1e4", lw);
+      ctx.beginPath(); ctx.moveTo(0, -r * 0.52); ctx.lineTo(0, -r * 0.32); ctx.strokeStyle = GOLD; ctx.lineWidth = lw * 1.5; ctx.stroke();
+    } else if (k === "monk" || k === "hermit") {
+      ctx.beginPath(); ctx.arc(0, -r * 0.12, r * 0.42, Math.PI * 1.05, Math.PI * 1.95); ctx.lineTo(r * 0.42, r * 0.35); ctx.lineTo(r * 0.28, r * 0.3);
+      ctx.lineTo(r * 0.28, -r * 0.1); ctx.quadraticCurveTo(0, -r * 0.55, -r * 0.28, -r * 0.1); ctx.lineTo(-r * 0.28, r * 0.3); ctx.lineTo(-r * 0.42, r * 0.35); ctx.closePath();
+      fill(ctx, garment, lw);
+    } else if (k === "sultan") {
+      ctx.beginPath(); ctx.ellipse(0, -r * 0.42, r * 0.36, r * 0.2, 0, 0, Math.PI * 2); fill(ctx, "#f4efe3", lw);
+      ctx.beginPath(); ctx.moveTo(-r * 0.33, -r * 0.42); ctx.quadraticCurveTo(0, -r * 0.3, r * 0.33, -r * 0.46); ctx.strokeStyle = c2; ctx.lineWidth = lw * 1.5; ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, -r * 0.6, r * 0.09, 0, Math.PI * 2); fill(ctx, c1, lw * 0.7);
+    } else {
+      // knight, templar: conical helmet with nasal over a mail coif
+      ctx.beginPath(); ctx.arc(0, -r * 0.12, r * 0.33, Math.PI * 0.95, Math.PI * 2.05); ctx.lineTo(r * 0.3, r * 0.22); ctx.lineTo(r * 0.22, r * 0.22); ctx.lineTo(r * 0.24, -r * 0.05);
+      ctx.quadraticCurveTo(0, -r * 0.38, -r * 0.24, -r * 0.05); ctx.lineTo(-r * 0.22, r * 0.22); ctx.lineTo(-r * 0.3, r * 0.22); ctx.closePath();
+      fill(ctx, "#a9afb6", lw);
+      ctx.beginPath(); ctx.moveTo(-r * 0.3, -r * 0.3); ctx.lineTo(0, -r * 0.82); ctx.lineTo(r * 0.3, -r * 0.3); ctx.closePath(); fill(ctx, STEEL, lw);
+      ctx.beginPath(); ctx.rect(-r * 0.035, -r * 0.32, r * 0.07, r * 0.26); fill(ctx, STEEL, lw * 0.6);
+    }
+    ctx.restore();
+    ctx.beginPath(); ctx.arc(0, 0, r - lw / 2, 0, Math.PI * 2); ctx.strokeStyle = INK; ctx.lineWidth = lw * 1.5; ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, r - lw * 3, 0, Math.PI * 2); ctx.strokeStyle = c2; ctx.lineWidth = lw; ctx.stroke();
+    ctx.restore();
+  }
+
   // ---------- public figure entry ----------
-  const KINDS = { knight, foot, archer, pilgrim, leader, siegetower: siegeTower, ram };
+  const KINDS = { knight, foot, archer, pilgrim, leader, siegetower: siegeTower, ram, king, templar, hospitaller, crossbow, pope, bishop, priest, crowd: crowdFig, ship, trebuchet };
   function figure(ctx, kind, x, y, s, o = {}) {
     const fn = KINDS[kind];
     if (!fn) return;
@@ -388,6 +691,16 @@ window.Sprites = (() => {
       dome(ctx, 0, 0, 0.36 * u, LEAD, lw, true);
       ctx.beginPath(); ctx.rect(0.36 * u, -0.6 * u, 0.16 * u, 0.6 * u); fill(ctx, STONE, lw);
     },
+    port(ctx, u, lw) {
+      ctx.beginPath(); ctx.rect(-0.7 * u, -0.12 * u, 0.9 * u, 0.12 * u); fill(ctx, STONE_SHADE, lw);
+      towerAt(ctx, 0.35 * u, 0, 0.22 * u, 0.62 * u, lw, false);
+      wallRun(ctx, -0.3 * u, 0.25 * u, -0.12 * u, 0.22 * u, lw);
+      ctx.save(); ctx.translate(-0.5 * u, -0.1 * u);
+      ctx.beginPath(); ctx.moveTo(-0.22 * u, -0.08 * u); ctx.quadraticCurveTo(0, 0.05 * u, 0.22 * u, -0.08 * u); ctx.closePath(); fill(ctx, WOOD, lw);
+      ctx.beginPath(); ctx.moveTo(0, -0.08 * u); ctx.lineTo(0, -0.45 * u); stroke(ctx, lw);
+      ctx.beginPath(); ctx.moveTo(0, -0.42 * u); ctx.lineTo(0.16 * u, -0.2 * u); ctx.lineTo(0, -0.14 * u); ctx.closePath(); fill(ctx, "#f4ead2", lw);
+      ctx.restore();
+    },
     battle(ctx, u, lw) {
       const sw = (a) => {
         ctx.save(); ctx.rotate(a);
@@ -413,5 +726,5 @@ window.Sprites = (() => {
     ctx.restore();
   }
 
-  return { figure, tent, landmark, cross, INK, STONE, GOLD, WOOD, WOOD_DARK };
+  return { figure, tent, landmark, portrait, emblemMark, cross, INK, STONE, GOLD, WOOD, WOOD_DARK };
 })();
