@@ -66,7 +66,7 @@
     if (d3.geoArea(f) > 2 * Math.PI) f.coordinates = [ring.slice().reverse()];
     return f;
   };
-  for (const snap of GEO.territories) for (const a of snap.areas) a.geo = toPolygon(a.poly);
+  for (const snap of GEO.territories) for (const a of snap.areas) { a.geo = toPolygon(a.poly); a.center = d3.geoCentroid(a.geo); }
 
   // ---------- canvas ----------
   const stage = el("stage");
@@ -139,6 +139,7 @@
     // Tall, narrow stages (phones) zoom in a little so the globe isn't lost in empty space.
     base = Math.max(Math.min(W, H), Math.min(W * 1.4, H * 0.75)) * 0.46;
     baseKey = "";
+    if (chapters[current] && el("legend").childElementCount) renderLegend();
     draw();
   }
 
@@ -224,7 +225,7 @@
       }
     }
     // mountains: little hachured peaks along each ridge
-    if (cam.k >= 1.6) {
+    if (cam.k >= 2.2) {
       const ps = Math.max(5, Math.min(13, 2.5 + cam.k * 1.1));
       for (const m of GEO.mountains || []) drawRidge(c, m.path, ps);
     }
@@ -373,7 +374,7 @@
       }
     }
     // river and mountain names when close in
-    if (cam.k >= 4) {
+    if (cam.k >= 5.5) {
       for (const rv of GEO.rivers || []) {
         const mid = rv.path[Math.floor(rv.path.length / 2)];
         if (!visible(mid)) continue;
@@ -545,7 +546,7 @@
   function afterTravel() {
     const ch = chapters[current];
     if (cinema && playing && (ch.battle || ch.moment)) {
-      autoTimer = setTimeout(() => openScene(ch.battle || ch.moment, true), 2200);
+      autoTimer = setTimeout(() => openScene(ch.moment || ch.battle, true), 2200);
       return;
     }
     scheduleAutoplay();
@@ -592,7 +593,7 @@
     const last = current === chapters.length - 1;
     const nextModule = MODULES[MODULES.indexOf(C) + 1];
     el("next").disabled = last && !nextModule;
-    el("next-label").textContent = last && nextModule ? nextModule.name.replace(/^The /, "") : "Next";
+    el("next-label").textContent = last && nextModule ? "Next crusade" : "Next";
     document.querySelectorAll(".tick").forEach((t, i) => {
       t.classList.toggle("on", i === current);
       t.classList.toggle("past", i < current);
@@ -623,7 +624,15 @@
     const routes = ids.filter((id) => { const l = C.routes[id].label; if (seen.has(l)) return false; seen.add(l); return true; })
       .map((id) => `<span><i style="background:${colors[id] || "var(--vermilion)"}"></i>${esc(C.routes[id].label)}</span>`).join("");
     const snap = territoryAt(chapters[current].mapYear || chapters[current].year);
-    const powers = snap ? [...new Set(snap.areas.map((a) => a.power))].filter((p) => GEO.powers[p]) : [];
+    // Only list powers whose lands are in view at this chapter's camera.
+    const ch = chapters[current];
+    const view = d3.geoOrthographic().clipAngle(90).scale(base * ch.view.k).translate([W / 2, H / 2]).rotate([-ch.view.at[0], -ch.view.at[1], 0]);
+    const inView = (a) => {
+      if (d3.geoDistance(a.center, ch.view.at) > 1.4) return false;
+      const p = view(a.center);
+      return p && p[0] > -W * 0.1 && p[0] < W * 1.1 && p[1] > -H * 0.1 && p[1] < H * 1.1;
+    };
+    const powers = snap ? [...new Set(snap.areas.filter(inView).map((a) => a.power))].filter((p) => GEO.powers[p]) : [];
     const lands = powers.map((p) => `<span><i class="sq" style="background:${rgba(GEO.powers[p].color, 0.55)};border-color:${GEO.powers[p].color}"></i>${esc(GEO.powers[p].name)}</span>`).join("");
     el("legend").innerHTML = `${lands ? `<div class="lg-row">${lands}</div>` : ""}${routes ? `<div class="lg-row">${routes}</div>` : ""}`;
   }
@@ -765,7 +774,11 @@
     el("cine-play").setAttribute("aria-label", v ? "Pause" : "Play");
     el("cine-play").innerHTML = el("play").innerHTML;
     clearTimeout(autoTimer);
-    if (v && !anim) scheduleAutoplay(1500);
+    if (v && !anim) {
+      const ch = chapters[current];
+      if (cinema && (ch.battle || ch.moment)) autoTimer = setTimeout(() => openScene(ch.moment || ch.battle, true), 1800);
+      else scheduleAutoplay(1500);
+    }
   }
   function scheduleAutoplay(delay) {
     clearTimeout(autoTimer);
