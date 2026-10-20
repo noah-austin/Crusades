@@ -13,6 +13,8 @@ window.CRUSADE = {
     peter: {
       label: "Peter the Hermit",
       color: "--r-peter",
+      until: "civetot",
+      column: ["leader", "pilgrim", "foot", "pilgrim", "pilgrim", "foot", "pilgrim", "pilgrim", "pilgrim"],
       points: [
         [6.96, 50.94],   // 0 Cologne
         [12.10, 49.01],  // 1 Regensburg
@@ -30,6 +32,7 @@ window.CRUSADE = {
     godfrey: {
       label: "Godfrey",
       color: "--r-godfrey",
+      until: "constantinople",
       points: [
         [5.07, 49.79],   // 0 Bouillon
         [8.27, 50.00],   // 1 Mainz
@@ -48,6 +51,7 @@ window.CRUSADE = {
     raymond: {
       label: "Raymond",
       color: "--r-raymond",
+      until: "constantinople",
       points: [
         [1.44, 43.60],   // 0 Toulouse
         [5.92, 45.57],   // 1 Savoy
@@ -67,6 +71,7 @@ window.CRUSADE = {
     bohemond: {
       label: "Bohemond",
       color: "--r-bohemond",
+      until: "constantinople",
       points: [
         [16.87, 41.12],  // 0 Bari
         [18.30, 40.85],  // 1 Adriatic crossing
@@ -81,6 +86,7 @@ window.CRUSADE = {
     main: {
       label: "Crusader army",
       color: "--r-main",
+      column: ["leader", "knight", "knight", "foot", "knight", "foot", "foot", "foot", "pilgrim", "foot", "pilgrim", "pilgrim"],
       points: [
         [28.98, 41.01],  // 0 Constantinople
         [29.35, 40.82],  // 1 Pelekanon
@@ -110,6 +116,7 @@ window.CRUSADE = {
     baldwin: {
       label: "Baldwin",
       color: "--r-baldwin",
+      column: ["leader", "knight", "knight", "knight"],
       points: [
         [34.05, 37.51],  // 0 Heraclea
         [34.78, 37.28],  // 1 Cilician Gates
@@ -122,6 +129,7 @@ window.CRUSADE = {
     ascalon: {
       label: "Godfrey",
       color: "--r-main",
+      until: "ascalon",
       points: [
         [35.23, 31.78],  // 0 Jerusalem
         [34.55, 31.67],  // 1 Ascalon
@@ -144,12 +152,23 @@ window.CRUSADE = {
     { name: "Kingdom of Jerusalem", at: [35.4, 32.4], from: "defender", state: true },
   ],
 
-  // Always-on reference cities. Event places are added from the chapters.
-  cities: [
-    { name: "Rome", at: [12.50, 41.90] },
-    { name: "Constantinople", at: [28.98, 41.01] },
-    { name: "Antioch", at: [36.16, 36.20] },
-    { name: "Jerusalem", at: [35.23, 31.78] },
+  // Drawn landmarks. Event places without one get a battle mark or a dot.
+  landmarks: [
+    { name: "Jerusalem", at: [35.23, 31.78], icon: "jerusalem", major: true },
+    { name: "Constantinople", at: [28.98, 41.01], icon: "hagia", major: true },
+    { name: "Antioch", at: [36.16, 36.20], icon: "antioch", major: true },
+    { name: "Rome", at: [12.50, 41.90], icon: "basilica", major: true },
+    { name: "Clermont", at: [3.08, 45.78], icon: "cathedral" },
+    { name: "Cologne", at: [6.96, 50.94], icon: "cathedral" },
+    { name: "Piacenza", at: [9.69, 45.05], icon: "town" },
+    { name: "Bouillon", at: [5.07, 49.79], icon: "castle" },
+    { name: "Toulouse", at: [1.44, 43.60], icon: "town" },
+    { name: "Bari", at: [16.87, 41.12], icon: "town" },
+    { name: "Nicaea", at: [29.72, 40.43], icon: "walled" },
+    { name: "Edessa", at: [38.79, 37.16], icon: "citadel" },
+    { name: "Tripoli", at: [35.85, 34.44], icon: "town" },
+    { name: "Acre", at: [35.07, 32.92], icon: "town" },
+    { name: "Ascalon", at: [34.55, 31.67], icon: "walled" },
   ],
 
   figures: {
@@ -248,6 +267,7 @@ window.CRUSADE = {
   chapters: [
     {
       id: "prologue",
+      fight: true,
       date: "1009–1094",
       year: 1071,
       title: "A Christian East under threat",
@@ -324,6 +344,7 @@ window.CRUSADE = {
     },
     {
       id: "civetot",
+      fight: true,
       date: "21 October 1096",
       year: 1096,
       title: "Disaster at Civetot",
@@ -371,6 +392,7 @@ window.CRUSADE = {
     },
     {
       id: "nicaea",
+      camp: "cru",
       date: "14 May – 19 June 1097",
       year: 1097,
       title: "The siege of Nicaea",
@@ -387,6 +409,8 @@ window.CRUSADE = {
     },
     {
       id: "dorylaeum",
+      fight: true,
+      battle: "dorylaeum",
       date: "1 July 1097",
       year: 1097,
       title: "The battle of Dorylaeum",
@@ -425,6 +449,7 @@ window.CRUSADE = {
     },
     {
       id: "antioch-siege",
+      camp: "cru",
       date: "21 October 1097",
       year: 1097,
       title: "Before the walls of Antioch",
@@ -471,6 +496,8 @@ window.CRUSADE = {
     },
     {
       id: "holy-lance",
+      camp: "foe",
+      battle: "antioch",
       date: "14–28 June 1098",
       year: 1098,
       title: "The Holy Lance",
@@ -508,6 +535,8 @@ window.CRUSADE = {
     },
     {
       id: "jerusalem",
+      camp: "cru",
+      battle: "jerusalem",
       date: "7 June – 15 July 1099",
       year: 1099,
       title: "Jerusalem",
@@ -550,6 +579,8 @@ window.CRUSADE = {
     },
     {
       id: "ascalon",
+      fight: true,
+      battle: "ascalon",
       date: "12 August 1099",
       year: 1099,
       title: "The battle of Ascalon",

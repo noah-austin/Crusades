@@ -39,10 +39,14 @@
 
   // ---------- canvas ----------
   const stage = document.getElementById("stage");
-  const canvas = document.getElementById("globe");
+  const canvas = document.getElementById("globe");     // overlay: routes, figures, labels
   const ctx = canvas.getContext("2d");
+  const baseCanvas = document.getElementById("base"); // cached map: sea, land, lines
+  const bctx = baseCanvas.getContext("2d");
   const projection = d3.geoOrthographic().clipAngle(90).precision(0.4);
   const path = d3.geoPath(projection, ctx);
+  const bpath = d3.geoPath(projection, bctx);
+  let baseKey = "";
   let W = 0, H = 0, base = 1;
   const cam = { lon: chapters[0].view.at[0], lat: chapters[0].view.at[1], k: 0.9 };
   let routeNow = {};       // current drawn progress per route
@@ -56,7 +60,7 @@
     colors = {
       sea: v("--sea"), seaDeep: v("--sea-deep"), land: v("--land"), coast: v("--coast"),
       rhumb: v("--rhumb"), ink: v("--ink"), soft: v("--ink-soft"), vellum: v("--vellum"),
-      verm: v("--vermilion"), gold: v("--gold"), leaf: v("--leaf"),
+      verm: v("--vermilion"), gold: v("--gold"), leaf: v("--leaf"), foe: v("--foe"),
     };
     for (const [id, r] of Object.entries(C.routes)) colors[id] = v(r.color);
   }
@@ -64,9 +68,12 @@
   function resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     W = stage.clientWidth; H = stage.clientHeight;
-    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    for (const [cv, cx] of [[canvas, ctx], [baseCanvas, bctx]]) {
+      cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+      cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
     base = Math.min(W, H) * 0.46;
+    baseKey = "";
     draw();
   }
 
@@ -113,26 +120,10 @@
   function draw() {
     if (!W) return;
     applyCam();
-    const r = base * cam.k;
+    const key = [cam.lon, cam.lat, cam.k, W, H, colors.sea].join("|");
+    if (key !== baseKey) { drawBase(); baseKey = key; }
     ctx.clearRect(0, 0, W, H);
-
-    // sea with limb shading
-    const [cx, cy] = [W / 2, H / 2];
-    const g = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.35, r * 0.1, cx, cy, r);
-    g.addColorStop(0, colors.sea); g.addColorStop(1, colors.seaDeep);
-    ctx.beginPath(); path(sphere); ctx.fillStyle = g; ctx.fill();
-
-    // rhumb lines + graticule
-    ctx.beginPath(); path(rhumbs); ctx.strokeStyle = colors.rhumb; ctx.lineWidth = 0.8; ctx.stroke();
-    ctx.beginPath(); path(graticule); ctx.strokeStyle = colors.rhumb; ctx.lineWidth = 0.5; ctx.stroke();
-
-    // land
-    ctx.beginPath(); path(cam.k < 2.4 ? land110 : land50);
-    ctx.fillStyle = colors.land; ctx.fill();
-    ctx.strokeStyle = colors.coast; ctx.lineWidth = cam.k > 6 ? 1.2 : 0.8; ctx.stroke();
-
-    // rim
-    ctx.beginPath(); path(sphere); ctx.strokeStyle = colors.coast; ctx.lineWidth = 1.2; ctx.stroke();
+    const now = performance.now() / 1000;
 
     // routes
     for (const [id, p] of Object.entries(routeNow)) {
@@ -147,43 +138,73 @@
       ctx.stroke(); ctx.setLineDash([]);
     }
 
-    // places: past events and reference cities
-    const placeLabels = [];
-    const placed = new Map();
-    for (const c of C.cities) placed.set(c.name, { at: c.at, kind: "city" });
-    for (let i = 0; i <= current; i++) {
-      const ch = chapters[i];
-      if (i === 0) continue; // prologue marks a distant battlefield; drawn below
-      const name = ch.place.split(",")[0];
-      if (ch.place.includes(" to ") || ch.place.startsWith("Down") || ch.place.startsWith("Western") || ch.place.startsWith("Central") || ch.place.startsWith("The Latin")) continue;
-      placed.set(name, { at: ch.at, kind: "event", i });
-    }
-    if (current === 0) placed.set("Manzikert", { at: chapters[0].at, kind: "event", i: 0 });
     const cur = chapters[current];
-    for (const [name, pl] of placed) {
-      if (!visible(pl.at)) continue;
-      const [x, y] = projection(pl.at);
-      const isCur = Math.abs(pl.at[0] - cur.at[0]) < 0.01 && Math.abs(pl.at[1] - cur.at[1]) < 0.01;
-      ctx.beginPath();
-      ctx.arc(x, y, isCur ? 5 : pl.kind === "event" ? 3.5 : 2.5, 0, Math.PI * 2);
-      ctx.fillStyle = isCur ? colors.verm : pl.kind === "event" ? colors.ink : colors.coast;
-      ctx.fill();
-      if (pl.kind === "event" && !isCur) { ctx.lineWidth = 1.5; ctx.strokeStyle = colors.land; ctx.stroke(); }
-      const showLabel = isCur || cam.k >= 3 || name === "Jerusalem" || name === "Constantinople";
-      if (showLabel) placeLabels.push({ name, x, y, isCur, pri: isCur ? 0 : pl.kind === "event" ? 2 : 3 });
+    const figS = Math.max(11, Math.min(26, 8 + cam.k * 1.4));
+
+    // siege camps
+    if (cur.camp && visible(cur.at)) {
+      const [x, y] = projection(cur.at);
+      const rr = Math.max(26, figS * 2.6);
+      const tents = [];
+      for (let i = 0; i < 9; i++) {
+        const a = (i / 9) * Math.PI * 2 + 0.3;
+        tents.push([x + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.55 + rr * 0.1]);
+      }
+      tents.sort((p, q) => p[1] - q[1]).forEach(([tx, ty]) => Sprites.tent(ctx, figS * 0.9, cur.camp === "foe" ? colors.foe : colors.verm, tx, ty));
     }
 
-    // army heads for routes moving in this chapter
+    // places
+    const placeLabels = [];
+    const iconBoxes = [];
+    const iconU = Math.max(12, Math.min(44, 5 + cam.k * 2.6));
+    const marks = [];
+    const near = (a, b) => Math.abs(a[0] - b[0]) < 0.06 && Math.abs(a[1] - b[1]) < 0.06;
+    for (const lm of C.landmarks) marks.push({ name: lm.name, at: lm.at, icon: lm.icon, pri: lm.major ? 1 : 3 });
+    for (let i = 0; i <= current; i++) {
+      const ch = chapters[i];
+      if (i === 0 && current !== 0) continue;
+      if (marks.some((m) => near(m.at, ch.at))) continue;
+      if (!ch.fight && !/^[A-Z][a-z]+(,|$)/.test(ch.place)) continue;
+      marks.push({ name: i === 0 ? "Manzikert" : ch.place.split(",")[0], at: ch.at, icon: ch.fight ? "battle" : null, pri: 2 });
+    }
+    for (const m of marks) { m.isCur = near(m.at, cur.at); if (m.isCur) m.pri = 0; }
+    marks.sort((p, q) => p.pri - q.pri);
+    for (const m of marks) {
+      if (!visible(m.at)) continue;
+      const [x, y] = projection(m.at);
+      const u = m.isCur ? iconU * 1.25 : iconU;
+      const box = [x - u * 0.8, y - u * 1.3, x + u * 0.8, y + 2];
+      const free = m.icon && !iconBoxes.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1]);
+      if (free && (m.isCur || m.pri <= 1 || cam.k >= 2.2)) {
+        Sprites.landmark(ctx, m.icon, x, y + 2, u);
+        iconBoxes.push(box);
+        m.lx = u * 0.8;
+      } else {
+        ctx.beginPath(); ctx.arc(x, y, m.isCur ? 5 : 3, 0, Math.PI * 2);
+        ctx.fillStyle = m.isCur ? colors.verm : colors.ink; ctx.fill();
+        ctx.lineWidth = 1.5; ctx.strokeStyle = colors.land; ctx.stroke();
+        m.lx = 6;
+      }
+      const showLabel = m.isCur || cam.k >= 3 || m.pri <= 1;
+      if (showLabel) placeLabels.push({ name: m.name, x: x + m.lx, y: y - (m.lx > 6 ? iconU * 0.35 : 0), isCur: m.isCur, pri: m.pri });
+    }
+
+    // armies: marching columns of figures behind each leader
     const headLabels = [];
-    for (const id of activeRoutes) {
+    for (const id of Object.keys(routeNow)) {
+      const route = C.routes[id];
       const p = routeNow[id];
       if (!(p > 0)) continue;
-      const coords = partialLine(C.routes[id].points, p);
+      if (route.until && chapterIndex[route.until] < current) continue;
+      const coords = partialLine(route.points, p);
       const head = coords[coords.length - 1];
+      const here = d3.geoDistance(head, cur.at) < 0.05;
+      if (!activeRoutes.has(id) && !here) continue;
       if (!visible(head)) continue;
+      const marchingNow = marching && activeRoutes.has(id);
+      drawColumn(id, coords, figS, now, marchingNow);
       const [x, y] = projection(head);
-      drawBanner(x, y, colors[id]);
-      headLabels.push({ text: C.routes[id].label, x, y, color: colors[id] });
+      headLabels.push({ text: route.label, x, y, color: colors[id] });
     }
 
     // labels, most important first
@@ -192,7 +213,7 @@
     for (const l of placeLabels.filter((l) => l.isCur)) placeLabel(l);
     for (const h of headLabels) {
       const f = { font: `700 12px "Alegreya Sans SC", sans-serif`, color: h.color, spacing: 0.5 };
-      label(h.text, h.x + 10, h.y + 12, f) || label(h.text, h.x - 10, h.y + 12, { ...f, align: "right" }) || label(h.text, h.x + 16, h.y - 26, f);
+      label(h.text, h.x + 12, h.y + 10, f) || label(h.text, h.x - 12, h.y + 10, { ...f, align: "right" }) || label(h.text, h.x + 14, h.y - figS * 2.1, f);
     }
     for (const l of placeLabels.filter((l) => !l.isCur)) placeLabel(l);
     // region names
@@ -215,23 +236,70 @@
     placePulse();
   }
 
+  function drawBase() {
+    const r = base * cam.k, c = bctx;
+    c.clearRect(0, 0, W, H);
+    const [cx, cy] = [W / 2, H / 2];
+    const g = c.createRadialGradient(cx - r * 0.3, cy - r * 0.35, r * 0.1, cx, cy, r);
+    g.addColorStop(0, colors.sea); g.addColorStop(1, colors.seaDeep);
+    c.beginPath(); bpath(sphere); c.fillStyle = g; c.fill();
+    c.beginPath(); bpath(rhumbs); c.strokeStyle = colors.rhumb; c.lineWidth = 0.8; c.stroke();
+    c.beginPath(); bpath(graticule); c.strokeStyle = colors.rhumb; c.lineWidth = 0.5; c.stroke();
+    c.beginPath(); bpath(cam.k < 2.4 ? land110 : land50);
+    c.fillStyle = colors.land; c.fill();
+    c.strokeStyle = colors.coast; c.lineWidth = cam.k > 6 ? 1.2 : 0.8; c.stroke();
+    c.beginPath(); bpath(sphere); c.strokeStyle = colors.coast; c.lineWidth = 1.2; c.stroke();
+  }
+
   function placeLabel({ name, x, y, isCur }) {
     const f = { font: isCur ? `600 15px Alegreya, serif` : `14px Alegreya, serif`, color: isCur ? colors.verm : colors.ink };
     label(name, x + 8, y - 1, f) || label(name, x - 8, y - 1, { ...f, align: "right" });
   }
 
-  // A small pennant with a cross: the army's position.
-  function drawBanner(x, y, color) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.strokeStyle = colors.ink; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -20); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(14, -16); ctx.lineTo(0, -11); ctx.closePath();
-    ctx.fillStyle = color; ctx.fill();
-    ctx.strokeStyle = colors.leaf; ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.moveTo(5, -18.5); ctx.lineTo(5, -12.5); ctx.moveTo(2.5, -15.8); ctx.lineTo(7.5, -15.8); ctx.stroke();
-    ctx.beginPath(); ctx.arc(0, 0, 2.5, 0, Math.PI * 2); ctx.fillStyle = colors.ink; ctx.fill();
-    ctx.restore();
+  // Lay figures back along the route from its head, spaced on screen.
+  function drawColumn(id, coords, s, now, moving) {
+    const route = C.routes[id];
+    const comp = route.column || ["leader", "knight", "knight", "foot", "foot", "foot"];
+    const dense = [];
+    for (let i = 0; i < coords.length - 1; i++) {
+      const ip = d3.geoInterpolate(coords[i], coords[i + 1]);
+      const n = Math.max(1, Math.ceil((d3.geoDistance(coords[i], coords[i + 1]) * 180) / Math.PI * 3));
+      for (let j = 0; j < n; j++) dense.push(ip(j / n));
+    }
+    dense.push(coords[coords.length - 1]);
+    const pts = [];
+    for (let k = dense.length - 1; k >= 0; k--) {
+      if (!visible(dense[k])) break;
+      pts.push(projection(dense[k]));
+    }
+    if (!pts.length) return;
+    const gap = s * 0.95;
+    const figs = [];
+    let seg = 0, along = 0;
+    for (let i = 0; i < comp.length; i++) {
+      let want = i * gap;
+      while (seg < pts.length - 1) {
+        const [ax, ay] = pts[seg], [bx, by] = pts[seg + 1];
+        const L = Math.hypot(bx - ax, by - ay);
+        if (along + L >= want) {
+          const f = L ? (want - along) / L : 0;
+          const dirx = ax - bx;
+          const side = i === 0 ? 0 : (i % 2 ? 1 : -1) * s * 0.22;
+          const nx = L ? -(ay - by) / L : 0, ny = L ? (ax - bx) / L : 0;
+          figs.push({ x: ax + (bx - ax) * f + nx * side, y: ay + (by - ay) * f + ny * side, facing: dirx >= 0 ? 1 : -1, kind: comp[i], i });
+          break;
+        }
+        along += L; seg++;
+      }
+      if (seg >= pts.length - 1 && i > 0) break;
+      if (pts.length === 1) { figs.push({ x: pts[0][0], y: pts[0][1], facing: 1, kind: comp[0], i: 0 }); break; }
+    }
+    figs.sort((a, b) => a.y - b.y).forEach((f) => {
+      Sprites.figure(ctx, f.kind, f.x, f.y, f.kind === "leader" ? s * 1.15 : s, {
+        facing: f.facing, t: now * 8 + f.i * 1.7, gait: moving && !reduceMotion ? 1 : 0, seed: f.i,
+        color: colors[id], shield: f.i % 3 === 1 ? colors.gold : undefined,
+      });
+    });
   }
 
   const pulse = document.getElementById("pulse");
@@ -246,17 +314,22 @@
   // ---------- animation ----------
   let anim = null;
   let raf = 0;
+  let marching = false;
+  let paused = false; // while a battle scene is open
   function loop(now) {
     raf = 0;
+    if (paused || document.hidden) return;
     if (anim) {
       const t = Math.min(1, (now - anim.start) / anim.dur);
       anim.step(t);
-      if (t >= 1) { const done = anim.done; anim = null; done && done(); }
+      if (t >= 1) { const done = anim.done; anim = null; marching = false; done && done(); }
     }
     draw();
-    if (anim) raf = requestAnimationFrame(loop);
+    // Keep animating so banners wave and figures stay alive.
+    raf = requestAnimationFrame(loop);
   }
-  function kick() { if (!raf) raf = requestAnimationFrame(loop); }
+  function kick() { if (!raf && !paused) raf = requestAnimationFrame(loop); }
+  document.addEventListener("visibilitychange", kick);
 
   function travel(index) {
     const ch = chapters[index];
@@ -299,6 +372,7 @@
             next[id] = f + (toRoutes[id] - f) * (moving.has(id) ? rt : 1);
           }
           routeNow = next;
+          marching = rt > 0 && rt < 1;
         } else {
           routeNow = { ...toRoutes };
         }
@@ -325,6 +399,7 @@
       <h2>${esc(ch.title)}</h2>
       <div class="place">${esc(ch.place)}</div>
       ${ch.body.map((p) => `<p>${esc(p)}</p>`).join("")}
+      ${ch.battle ? `<button class="watch" id="watch"><span class="watch-icon" aria-hidden="true">⚔</span><span><strong>Watch the battle</strong><small>An animated plan of the fighting</small></span></button>` : ""}
       ${(ch.quotes || []).map((q) => `<blockquote><p>“${esc(q.text)}”</p><cite>${esc(q.source)}</cite></blockquote>`).join("")}
       ${figs.length ? `<section class="people"><h3>KEY FIGURES</h3><div class="chips">${figs
         .map(([id, f]) => `<button class="chip" data-fig="${id}"><span class="seal" aria-hidden="true">${esc(initials(f.name))}</span>${esc(f.name)}</button>`)
@@ -353,7 +428,16 @@
   chapterEl.addEventListener("click", (e) => {
     const b = e.target.closest("[data-fig]");
     if (b) openFigure(b.dataset.fig);
+    if (e.target.closest("#watch")) openBattle();
   });
+
+  function openBattle() {
+    const sc = window.BATTLES && window.BATTLES[chapters[current].battle];
+    if (!sc) return;
+    setPlaying(false);
+    paused = true;
+    Battle.open(sc, () => { paused = false; kick(); el("watch") && el("watch").focus(); });
+  }
 
   // ---------- timeline ----------
   const tickPct = (i) => 1.5 + (97 * i) / (chapters.length - 1);
@@ -455,7 +539,7 @@
   let userMoved = false;
   recenterBtn.addEventListener("click", () => travel(current));
   function markMoved() {
-    anim = null;
+    anim = null; marching = false;
     if (!userMoved) { userMoved = true; recenterBtn.hidden = false; routeNow = { ...routeStates[current] }; }
   }
 
