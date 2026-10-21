@@ -1,19 +1,20 @@
 <meta charset="utf-8">
-<title>Crusades Atlas</title>
+<title>The Crusades</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Alegreya:ital,wght@0,400;0,600;1,400&family=Alegreya+Sans+SC:wght@500;700&display=swap">
 <style>
-/* Layout: a portolan-chart globe fills the stage; the chronicle reads beside it (desktop) or beneath it (phone). */
+/* Layout: a film. The portolan globe fills the screen; title cards, subtitles and quotes appear over it. */
 :root {
-  --vellum: #efe5cf;      /* page ground */
-  --leaf: #f7f0df;        /* chronicle panel */
+  --vellum: #efe5cf;
+  --leaf: #f7f0df;
   --ink: #2b2219;
   --ink-soft: #6b5b46;
   --rule: #d8c8a5;
-  --vermilion: #a8301d;   /* accent: the cross, the current event */
+  --vermilion: #a8301d;
   --gold: #94701f;
+  --scrim: rgba(239, 229, 207, .82);
 
   --sea: #cfd4c2;
   --sea-deep: #b4bda8;
@@ -38,7 +39,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --vellum: #11151d; --leaf: #171c26; --ink: #ece2cb; --ink-soft: #ab9f88; --rule: #2d3441;
-    --vermilion: #e2644c; --gold: #d3ad5c;
+    --vermilion: #e2644c; --gold: #d3ad5c; --scrim: rgba(17, 21, 29, .8);
     --sea: #1b2739; --sea-deep: #121b29; --land: #3a3225; --coast: #cfb37a; --rhumb: rgba(211, 173, 92, .16);
     --r-main: #ec6a50; --r-godfrey: #d9789f; --r-raymond: #6cc39a; --r-bohemond: #a990e0; --r-peter: #e3a447; --r-baldwin: #6fb0e6; --foe: #78b0ae; --river: #6fa6bb; --mount: #c2a679;
     color-scheme: dark;
@@ -46,7 +47,7 @@
 }
 :root[data-theme="dark"] {
   --vellum: #11151d; --leaf: #171c26; --ink: #ece2cb; --ink-soft: #ab9f88; --rule: #2d3441;
-  --vermilion: #e2644c; --gold: #d3ad5c;
+  --vermilion: #e2644c; --gold: #d3ad5c; --scrim: rgba(17, 21, 29, .8);
   --sea: #1b2739; --sea-deep: #121b29; --land: #3a3225; --coast: #cfb37a; --rhumb: rgba(211, 173, 92, .16);
   --r-main: #ec6a50; --r-godfrey: #d9789f; --r-raymond: #6cc39a; --r-bohemond: #a990e0; --r-peter: #e3a447; --r-baldwin: #6fb0e6; --foe: #78b0ae; --river: #6fa6bb; --mount: #c2a679;
   color-scheme: dark;
@@ -55,379 +56,258 @@
 html, body { height: 100%; }
 body {
   background: var(--vellum); color: var(--ink);
-  font-family: var(--f-body); font-size: 17px; line-height: 1.55;
-  overflow: hidden;
+  font-family: var(--f-body); font-size: 17px; line-height: 1.5;
+  overflow: hidden; -webkit-user-select: none; user-select: none;
 }
 button { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--vermilion); outline-offset: 2px; }
 
-.app {
-  height: 100%;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(340px, 430px);
-  grid-template-rows: auto minmax(0, 1fr);
-  grid-template-areas: "head panel" "stage panel";
-}
-
-/* ---------- header + timeline ---------- */
-.head {
-  grid-area: head;
-  padding-block: 14px 8px;
-  padding-left: max(16px, env(safe-area-inset-left, 0px));
-  padding-right: 16px;
-  display: grid; gap: 10px;
-  border-bottom: 1px solid var(--rule);
-}
-.brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.brand h1 {
-  margin: 0; font-family: var(--f-display); font-weight: 400;
-  font-size: 26px; line-height: 1; letter-spacing: .01em;
-}
-.brand h1 .cross { color: var(--vermilion); }
-.brand span { font-family: var(--f-label); font-size: 14px; letter-spacing: .06em; color: var(--ink-soft); }
-
-.timeline { position: relative; height: 34px; }
-.timeline .track { position: absolute; left: 0; right: 0; top: 9px; height: 2px; background: var(--rule); }
-.timeline .fill { position: absolute; left: 0; top: 9px; height: 2px; background: var(--vermilion); transition: width .6s ease; }
-.tick {
-  position: absolute; top: 0; width: 20px; height: 20px; margin-left: -10px;
-  border: 0; padding: 0; background: none; cursor: pointer;
-}
-.tick::before {
-  content: ""; position: absolute; left: 6px; top: 6px; width: 8px; height: 8px;
-  border-radius: 50%; background: var(--leaf); box-shadow: inset 0 0 0 2px var(--ink-soft);
-  transition: transform .2s;
-}
-.tick.past::before { background: var(--vermilion); box-shadow: none; }
-.tick.on::before { background: var(--vermilion); box-shadow: 0 0 0 3px var(--vellum), 0 0 0 4px var(--vermilion); transform: scale(1.15); }
-.tick:hover::before { transform: scale(1.35); }
-.year {
-  position: absolute; top: 19px; transform: translateX(-50%);
-  font-family: var(--f-label); font-size: 12px; letter-spacing: .06em; color: var(--ink-soft);
-  font-variant-numeric: tabular-nums; pointer-events: none;
-}
-
-/* ---------- globe stage ---------- */
-.stage { grid-area: stage; position: relative; min-height: 0; overflow: hidden; }
+/* ---------- the screen ---------- */
+.stage { position: fixed; inset: 0; overflow: hidden; }
 #base, #globe { position: absolute; inset: 0; width: 100%; height: 100%; }
-#globe { touch-action: none; cursor: grab; }
-#globe.dragging { cursor: grabbing; }
+.vignette {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 45%, transparent 55%, var(--vellum) 100%);
+  opacity: .85;
+}
 .pulse {
   position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; pointer-events: none;
   border-radius: 50%; border: 2px solid var(--vermilion);
   animation: pulse 2.2s ease-out infinite;
 }
 @keyframes pulse { from { transform: scale(.7); opacity: 1; } to { transform: scale(3.4); opacity: 0; } }
-.recenter {
-  position: absolute; right: 12px; bottom: 12px;
-  font-family: var(--f-label); font-size: 14px; letter-spacing: .05em;
-  background: var(--leaf); border: 1px solid var(--rule); border-radius: 999px;
-  padding: 6px 14px; cursor: pointer;
-}
-.legend {
-  position: absolute; left: max(12px, env(safe-area-inset-left, 0px)); bottom: 12px;
-  display: flex; flex-wrap: wrap; gap: 4px 12px; max-width: calc(100% - 140px);
-  font-family: var(--f-label); font-size: 13px; letter-spacing: .04em; color: var(--ink-soft);
-}
-.legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
-
-/* ---------- chronicle panel ---------- */
-.panel {
-  grid-area: panel; min-height: 0; display: flex; flex-direction: column;
-  background: var(--leaf); border-left: 1px solid var(--rule);
-}
-.controls {
-  display: flex; align-items: center; gap: 8px;
-  padding-block: 12px;
-  padding-left: 20px; padding-right: max(16px, env(safe-area-inset-right, 0px));
-  border-bottom: 1px solid var(--rule);
-}
-.controls .count { flex: 1; font-family: var(--f-label); font-size: 14px; letter-spacing: .06em; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
-.btn {
-  min-width: 44px; height: 40px; padding: 0 12px;
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  background: none; border: 1px solid var(--rule); border-radius: 8px; cursor: pointer;
-  font-family: var(--f-label); font-size: 15px; letter-spacing: .04em;
-}
-.btn:hover:not(:disabled) { border-color: var(--ink-soft); }
-.btn:disabled { opacity: .35; cursor: default; }
-.btn.primary { background: var(--vermilion); border-color: var(--vermilion); color: var(--leaf); }
-.btn svg { width: 16px; height: 16px; fill: currentColor; }
-
-.chapter {
-  flex: 1; overflow-y: auto; overscroll-behavior: contain;
-  padding-block: 20px 32px;
-  padding-left: 24px; padding-right: max(24px, env(safe-area-inset-right, 0px));
-}
-.eyebrow { font-family: var(--f-label); font-size: 14px; letter-spacing: .08em; color: var(--vermilion); font-variant-numeric: tabular-nums; }
-.chapter h2 {
-  margin: 4px 0 2px; font-family: var(--f-display); font-weight: 400;
-  font-size: 34px; line-height: 1.08; text-wrap: balance;
-}
-.place { font-style: italic; color: var(--ink-soft); margin-bottom: 14px; }
-.chapter p { margin: 0 0 14px; max-width: 62ch; }
-.chapter p:first-of-type::first-letter {
-  font-family: var(--f-display); color: var(--vermilion);
-  float: left; font-size: 3.1em; line-height: .85; padding: 4px 6px 0 0;
-}
-blockquote {
-  margin: 20px 0; padding: 4px 0 4px 16px; border-left: 2px solid var(--gold);
-}
-blockquote p { font-style: italic; margin: 0 0 6px !important; }
-.chapter blockquote p::first-letter, .chapter .myth p::first-letter, .chapter .today::first-letter { all: unset; }
-blockquote cite { font-style: normal; font-family: var(--f-label); font-size: 13px; letter-spacing: .05em; color: var(--ink-soft); }
-.people { margin-top: 22px; }
-.people h3 { margin: 0 0 8px; font-family: var(--f-label); font-weight: 700; font-size: 13px; letter-spacing: .1em; color: var(--ink-soft); }
-.chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.chip {
-  background: none; border: 1px solid var(--rule); border-radius: 999px; padding: 4px 12px 4px 4px;
-  display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 15px;
-}
-.chip:hover { border-color: var(--ink-soft); }
-.seal {
-  width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
-  background: var(--vermilion); color: var(--leaf); font-family: var(--f-display); font-size: 14px;
-}
-
-/* ---------- header controls ---------- */
-.crusade-btn {
-  display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; margin-left: -8px;
-  background: none; border: 1px solid transparent; border-radius: 8px; cursor: pointer;
-  font-family: var(--f-label); font-size: 14px; letter-spacing: .06em; color: var(--ink-soft);
-}
-.crusade-btn:hover { border-color: var(--rule); color: var(--ink); }
-.crusade-btn svg, .cinema-btn svg { width: 14px; height: 14px; fill: currentColor; }
-.cinema-btn { margin-left: auto; height: 34px; font-size: 14px; }
-.cinema-btn[aria-pressed="true"] { background: var(--vermilion); border-color: var(--vermilion); color: var(--leaf); }
-
-/* ---------- day counter ---------- */
 .days {
-  position: absolute; top: 12px; left: max(12px, env(safe-area-inset-left, 0px));
-  padding: 6px 12px; border-radius: 8px; background: var(--leaf); border: 1px solid var(--rule);
-  font-family: var(--f-label); font-size: 14px; letter-spacing: .05em; color: var(--ink-soft);
-  font-variant-numeric: tabular-nums; pointer-events: none;
+  position: absolute; top: calc(18px + env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px));
+  font-family: var(--f-label); font-size: 15px; letter-spacing: .06em; color: var(--ink-soft);
+  font-variant-numeric: tabular-nums; pointer-events: none; text-align: right;
+  transition: opacity .6s;
 }
-.days b { color: var(--vermilion); font-size: 17px; margin-right: 4px; }
+.days b { display: block; font-family: var(--f-display); font-weight: 400; font-size: 30px; line-height: 1; color: var(--vermilion); letter-spacing: 0; }
 
-/* ---------- legend ---------- */
-.legend { flex-direction: column; flex-wrap: nowrap; gap: 4px; }
-.lg-row { display: flex; flex-wrap: wrap; gap: 3px 12px; }
-.legend i.sq { width: 11px; height: 11px; border-radius: 2px; border: 1px solid; }
+/* ---------- overlays that fade ---------- */
+.fade { opacity: 0; transition: opacity .9s ease; pointer-events: none; }
+.fade.show { opacity: 1; }
 
-/* ---------- chapter extras ---------- */
-.scenes { display: grid; gap: 8px; margin: 6px 0 18px; }
-.scenes .watch { margin: 0; }
-.watch.moment { background: var(--leaf); color: var(--ink); border: 1px solid var(--vermilion); }
-.watch.moment .watch-icon { color: var(--vermilion); }
-.watch.moment small { color: var(--ink-soft); opacity: 1; }
-.tag {
-  display: inline-block; flex: none; padding: 1px 8px; border-radius: 999px;
-  font-family: var(--f-label); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-  background: var(--ink-soft); color: var(--leaf);
-}
-.tag.fact { background: var(--vermilion); }
-.tag.plain { background: none; color: var(--vermilion); padding: 0; margin-right: 4px; }
-.myth { display: grid; gap: 10px; margin: 20px 0; padding: 14px 16px; border: 1px dashed var(--ink-soft); border-radius: 10px; }
-.myth-row { display: flex; gap: 10px; align-items: baseline; }
-.myth-row p { margin: 0 !important; }
-.myth-row p::first-letter, .today::first-letter { all: unset; }
-.myth-row:first-child p { text-decoration: line-through; text-decoration-color: var(--vermilion); text-decoration-thickness: 1px; color: var(--ink-soft); }
-.today { font-size: 15px; color: var(--ink-soft); }
-.sources { margin-top: 22px; }
-.sources h3 { margin: 0 0 6px; font-family: var(--f-label); font-weight: 700; font-size: 13px; letter-spacing: .1em; color: var(--ink-soft); }
-.sources ul { margin: 0; padding-left: 18px; font-size: 15px; }
-.chapter a, blockquote a { color: var(--vermilion); text-underline-offset: 3px; }
-canvas.mini { width: 28px; height: 28px; border-radius: 50%; }
-canvas.big-portrait { width: 88px; height: 88px; margin-bottom: 8px; }
-
-/* ---------- crusade picker ---------- */
-.picker-list { display: grid; gap: 8px; margin-top: 10px; }
-.pick {
-  display: grid; gap: 2px; text-align: left; padding: 12px 14px; cursor: pointer;
-  background: none; border: 1px solid var(--rule); border-radius: 10px;
-}
-.pick:hover { border-color: var(--ink-soft); }
-.pick.on { border-color: var(--vermilion); box-shadow: inset 3px 0 0 var(--vermilion); }
-.pick-years { font-family: var(--f-label); font-size: 13px; letter-spacing: .07em; color: var(--vermilion); }
-.pick-name { font-family: var(--f-display); font-size: 22px; line-height: 1.15; }
-.pick-blurb { font-size: 15px; color: var(--ink-soft); }
-
-/* ---------- cinema ---------- */
-.cine { display: none; }
-body.cinema .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); grid-template-areas: "stage"; }
-body.cinema .head, body.cinema .panel, body.cinema .legend, body.cinema .recenter { display: none; }
-body.cinema .cine {
-  display: grid; gap: 10px; position: absolute; left: 0; right: 0; bottom: 0;
-  padding-block: 40px calc(14px + env(safe-area-inset-bottom, 0px));
+/* chapter title card */
+.titlecard {
+  position: absolute; left: 0; right: 0; top: calc(9vh + env(safe-area-inset-top, 0px));
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
-  background: linear-gradient(to top, var(--vellum) 55%, transparent);
-  pointer-events: none;
+  text-align: center;
 }
-.cine > * { pointer-events: auto; }
-.cine-card { max-width: 64ch; }
-.cine-card h2 { margin: 2px 0 4px; font-family: var(--f-display); font-weight: 400; font-size: 34px; line-height: 1.08; text-wrap: balance; }
-.cine-card p { margin: 0; font-size: 18px; }
-.cine-controls { display: flex; flex-wrap: wrap; gap: 8px; }
-.cine-controls .btn { background: var(--leaf); }
-.brand { flex-wrap: nowrap; align-items: center; min-width: 0; }
-.crusade-btn { min-width: 0; }
-.crusade-btn #crusade-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cinema-btn { flex: none; }
-@media (max-width: 560px) {
-  .brand h1 .word { display: none; }
-  .crusade-btn { margin-left: 0; font-size: 13px; }
-  .cinema-btn .label { display: none; }
+.titlecard .date { font-family: var(--f-label); font-size: 16px; letter-spacing: .16em; color: var(--vermilion); text-transform: uppercase; }
+.titlecard h2 {
+  margin: 6px auto 0; max-width: 18ch; font-family: var(--f-display); font-weight: 400;
+  font-size: clamp(38px, 7vw, 76px); line-height: 1.02; text-wrap: balance;
+  text-shadow: 0 0 18px var(--vellum), 0 0 4px var(--vellum);
 }
-@media (max-width: 820px) {
-  .cinema-btn { height: 32px; padding: 0 10px; }
-  .cine-card h2 { font-size: 26px; }
-  .cine-card p { font-size: 16px; }
-}
+.titlecard .rule { display: block; width: 64px; height: 1px; margin: 14px auto 0; background: var(--vermilion); }
 
-/* ---------- watch the battle ---------- */
-.watch {
-  display: flex; align-items: center; gap: 14px; width: 100%; margin: 6px 0 18px;
-  padding: 12px 16px; text-align: left; cursor: pointer;
-  background: var(--vermilion); color: var(--leaf); border: 0; border-radius: 10px;
+/* part card and the opening */
+.partcard {
+  position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 10px;
+  background: var(--scrim);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
-.watch:hover { filter: brightness(1.08); }
-.watch-icon { font-size: 26px; line-height: 1; }
-.watch strong { display: block; font-family: var(--f-label); font-size: 17px; letter-spacing: .05em; }
-.watch small { display: block; font-size: 14px; opacity: .85; }
+.partcard .eyebrow { font-family: var(--f-label); font-size: 17px; letter-spacing: .22em; color: var(--vermilion); text-transform: uppercase; }
+.partcard h2 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: clamp(44px, 8vw, 92px); line-height: 1; text-wrap: balance; }
+.partcard .years { font-family: var(--f-label); font-size: 20px; letter-spacing: .12em; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 
-/* ---------- battle scene (a manuscript plate, same look in both themes) ---------- */
+/* subtitles */
+.subs {
+  position: absolute; left: 0; right: 0; bottom: calc(26px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; justify-content: center; pointer-events: none;
+}
+.subs p {
+  margin: 0; max-width: 46ch; text-align: center; font-size: clamp(18px, 2.1vw, 24px); line-height: 1.42;
+  padding: 10px 18px; border-radius: 10px; background: var(--scrim);
+  transition: opacity .35s;
+}
+.subs p:empty { opacity: 0; }
+body.nosubs .subs { display: none; }
+
+/* quote card */
+.quote {
+  position: absolute; inset: 0; display: grid; place-content: center; background: var(--scrim);
+  padding-left: max(24px, env(safe-area-inset-left, 0px)); padding-right: max(24px, env(safe-area-inset-right, 0px));
+}
+.quote blockquote { margin: 0 auto; max-width: 32ch; text-align: center; }
+.quote blockquote::before { content: "“"; display: block; font-family: var(--f-display); font-size: 90px; line-height: .6; color: var(--vermilion); }
+.quote p { margin: 0; font-style: italic; font-size: clamp(22px, 3vw, 34px); line-height: 1.32; text-wrap: balance; }
+.quote cite { display: block; margin-top: 18px; font-style: normal; font-family: var(--f-label); font-size: 16px; letter-spacing: .1em; color: var(--ink-soft); }
+
+/* key figure introduced */
+.figure {
+  position: absolute; left: max(18px, env(safe-area-inset-left, 0px)); bottom: calc(140px + env(safe-area-inset-bottom, 0px));
+  display: flex; align-items: center; gap: 14px; padding: 10px 18px 10px 10px;
+  background: var(--scrim); border-left: 3px solid var(--vermilion); border-radius: 0 12px 12px 0;
+  transform: translateX(-12px); transition: opacity .7s, transform .7s;
+}
+.figure.show { transform: none; }
+.figure canvas { width: 64px; height: 64px; flex: none; }
+.figure .name { font-family: var(--f-display); font-size: 25px; line-height: 1.1; }
+.figure .role { font-size: 15px; color: var(--ink-soft); font-style: italic; }
+
+/* ---------- opening screen ---------- */
+.opening {
+  position: absolute; inset: 0; z-index: 30; display: grid; place-content: center; text-align: center; gap: 14px;
+  background: radial-gradient(ellipse at 50% 50%, var(--scrim) 30%, var(--vellum) 100%);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  transition: opacity 1.2s;
+}
+.opening.gone { opacity: 0; pointer-events: none; }
+.opening .cross { font-size: 40px; color: var(--vermilion); line-height: 1; }
+.opening h1 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: clamp(56px, 11vw, 132px); line-height: .95; letter-spacing: .01em; }
+.opening .sub { font-family: var(--f-label); font-size: clamp(16px, 2vw, 20px); letter-spacing: .16em; color: var(--ink-soft); text-transform: uppercase; }
+.begin {
+  justify-self: center; margin-top: 18px; display: inline-flex; align-items: center; gap: 12px;
+  padding: 14px 30px; border: 0; border-radius: 999px; cursor: pointer;
+  background: var(--vermilion); color: var(--leaf);
+  font-family: var(--f-label); font-size: 20px; letter-spacing: .12em;
+}
+.begin svg { width: 18px; height: 18px; fill: currentColor; }
+.begin:hover { filter: brightness(1.08); }
+.parts { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; font-size: 16px; color: var(--ink-soft); }
+.parts button { background: none; border: 0; padding: 4px 2px; cursor: pointer; color: var(--ink-soft); text-decoration: underline; text-underline-offset: 4px; }
+.parts button:hover { color: var(--vermilion); }
+.sound-note { font-size: 15px; color: var(--ink-soft); font-style: italic; }
+
+/* ---------- controls: hidden until you touch the screen ---------- */
+.progress { position: absolute; left: 0; right: 0; top: 0; height: 3px; background: transparent; }
+.progress i { display: block; height: 100%; width: 0; background: var(--vermilion); transition: width 1s; }
+.hud {
+  position: absolute; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 20;
+  transform: translate(-50%, 8px); display: flex; align-items: center; gap: 6px;
+  padding: 6px; border-radius: 999px; background: var(--leaf); border: 1px solid var(--rule);
+  box-shadow: 0 6px 24px rgba(0,0,0,.15);
+  opacity: 0; pointer-events: none; transition: opacity .35s, transform .35s;
+}
+body.hud-on .hud { opacity: 1; pointer-events: auto; transform: translate(-50%, 0); }
+body.hud-on .subs { bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
+.hud button {
+  width: 46px; height: 46px; display: grid; place-items: center; border: 0; border-radius: 50%;
+  background: none; cursor: pointer;
+}
+.hud button:hover { background: var(--vellum); }
+.hud button.main { background: var(--vermilion); color: var(--leaf); }
+.hud svg { width: 20px; height: 20px; fill: currentColor; }
+.hud .sep { width: 1px; height: 24px; background: var(--rule); margin: 0 2px; }
+.hud .cc { font-family: var(--f-label); font-weight: 700; font-size: 14px; letter-spacing: .04em; }
+.hud .off { opacity: .4; }
+.where {
+  position: absolute; left: max(18px, env(safe-area-inset-left, 0px)); top: calc(14px + env(safe-area-inset-top, 0px)); z-index: 20;
+  font-family: var(--f-label); font-size: 14px; letter-spacing: .08em; color: var(--ink-soft);
+  opacity: 0; transition: opacity .35s; pointer-events: none;
+}
+body.hud-on .where { opacity: 1; }
+
+/* chapter list */
+dialog {
+  width: min(560px, calc(100% - 32px)); max-height: 82vh; padding: 0; overflow: auto;
+  border: 1px solid var(--rule); border-radius: 14px; background: var(--leaf); color: var(--ink);
+}
+dialog::backdrop { background: rgba(20, 14, 6, .5); }
+.toc { padding: 22px 24px; display: grid; gap: 18px; }
+.toc h2 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 30px; }
+.toc h3 { margin: 0 0 6px; font-family: var(--f-label); font-size: 14px; letter-spacing: .12em; color: var(--vermilion); text-transform: uppercase; }
+.toc ol { margin: 0; padding: 0; list-style: none; display: grid; }
+.toc li button {
+  width: 100%; display: flex; gap: 12px; align-items: baseline; text-align: left; padding: 7px 8px; border: 0; border-radius: 8px;
+  background: none; cursor: pointer; font-size: 17px;
+}
+.toc li button:hover { background: var(--vellum); }
+.toc li button.on { background: var(--vellum); box-shadow: inset 3px 0 0 var(--vermilion); }
+.toc .d { flex: none; width: 3.4em; font-family: var(--f-label); font-size: 14px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.toc .close { justify-self: end; padding: 8px 18px; border: 1px solid var(--rule); border-radius: 999px; background: none; cursor: pointer; font-family: var(--f-label); font-size: 15px; }
+
+/* ---------- battle and moment scenes (a manuscript plate, same look in both themes) ---------- */
 .battle {
-  position: fixed; inset: 0; z-index: 20;
+  position: fixed; inset: 0; z-index: 10;
   display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
   background: #e6d7b5; color: #2a1f16;
   padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+  animation: plate-in .9s ease;
 }
-.battle .btn { border-color: #c9b58c; color: #2a1f16; }
-.battle .btn.primary { background: #a8301d; border-color: #a8301d; color: #f7f0df; }
+@keyframes plate-in { from { opacity: 0; } to { opacity: 1; } }
 .battle-head {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding-block: 12px 8px;
+  display: flex; align-items: center; justify-content: center; text-align: center; gap: 12px;
+  padding-block: 14px 6px;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
-.battle-head h2 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 28px; line-height: 1.1; }
-.battle-meta { font-family: var(--f-label); font-size: 14px; letter-spacing: .07em; color: #a8301d; }
+.battle-head h2 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: clamp(26px, 3.6vw, 40px); line-height: 1.1; }
+.battle-meta { font-family: var(--f-label); font-size: 14px; letter-spacing: .12em; color: #a8301d; text-transform: uppercase; }
+.battle-head #battle-close, .battle-controls { display: none; }
 .battle-field { position: relative; min-height: 0; margin-inline: max(8px, env(safe-area-inset-left, 0px)) max(8px, env(safe-area-inset-right, 0px)); }
 .battle-field canvas { position: absolute; inset: 0; }
 .battle-foot {
-  display: grid; gap: 10px; padding-block: 10px 14px;
+  display: flex; justify-content: center; padding-block: 10px 22px;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
-.battle-caption { margin: 0; max-width: 70ch; min-height: 3.1em; font-size: 17px; line-height: 1.5; }
-.battle-controls { display: flex; align-items: center; gap: 8px; }
-.battle-dots { flex: 1; display: flex; gap: 6px; }
-.battle-dots span { width: 9px; height: 9px; border-radius: 50%; box-shadow: inset 0 0 0 2px #6b5b46; }
-.battle-dots span.past { background: #a8301d; box-shadow: none; }
-.battle-dots span.on { background: #a8301d; box-shadow: 0 0 0 2px #e6d7b5, 0 0 0 3px #a8301d; }
-@media (max-width: 820px) {
-  .battle-head h2 { font-size: 22px; }
-  .battle-caption { font-size: 15px; min-height: 4.5em; }
-}
+.battle-caption { margin: 0; max-width: 46ch; min-height: 3em; text-align: center; font-size: clamp(18px, 2.1vw, 24px); line-height: 1.42; }
+body.nosubs .battle-caption { visibility: hidden; }
+body.hud-on .battle-foot { padding-bottom: 92px; }
 
-/* ---------- figure dialog ---------- */
-dialog {
-  width: min(520px, calc(100% - 32px)); max-height: 82vh; padding: 0;
-  border: 1px solid var(--rule); border-radius: 12px;
-  background: var(--leaf); color: var(--ink);
-}
-#picker .dlg h2 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 28px; }
-dialog::backdrop { background: rgba(20, 14, 6, .45); }
-.dlg { padding: 24px; display: grid; gap: 4px; }
-.dlg .seal { width: 52px; height: 52px; font-size: 26px; margin-bottom: 8px; }
-.dlg h2 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 30px; line-height: 1.1; }
-.dlg .role { color: var(--ink-soft); font-style: italic; }
-.dlg .life { font-family: var(--f-label); font-size: 14px; letter-spacing: .06em; color: var(--vermilion); margin-bottom: 10px; }
-.dlg p { margin: 0 0 12px; }
-.dlg .appears { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
-.dlg .appears button { background: none; border: 0; padding: 0; color: var(--vermilion); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; font-size: 15px; }
-.dlg .close { justify-self: end; margin-top: 8px; }
-
-/* ---------- phone ---------- */
-@media (max-width: 820px) {
-  body { font-size: 16px; }
-  .app {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(220px, 1fr) minmax(0, 48%);
-    grid-template-areas: "head" "stage" "panel";
-  }
-  .head { padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 10px 6px; }
-  .brand h1 { font-size: 22px; }
-  .panel { border-left: 0; border-top: 1px solid var(--rule); }
-  .controls { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-block: 8px; }
-  .chapter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 14px 24px; }
-  .chapter h2 { font-size: 28px; }
-  .legend { display: none; }
+body.hud-on .days { top: calc(48px + env(safe-area-inset-top, 0px)); }
+@media (max-width: 640px) {
+  .where .wm { display: none; }
+  .figure { bottom: auto; top: calc(64px + env(safe-area-inset-top, 0px)); padding: 8px 14px 8px 8px; max-width: calc(100% - 120px); }
+  .figure canvas { width: 48px; height: 48px; }
+  .figure .name { font-size: 20px; }
+  .hud button { width: 42px; height: 42px; }
+  .days b { font-size: 24px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .pulse { animation: none; }
-  .timeline .fill { transition: none; }
+  .fade, .figure { transition: none; }
 }
 </style>
 
-<div class="app">
-  <header class="head">
-    <div class="brand">
-      <h1><span class="cross">✠</span><span class="word"> Crusades Atlas</span></h1>
-      <button class="crusade-btn" id="crusade-btn" aria-haspopup="dialog"><span id="crusade-name">The First Crusade · 1095–1099</span> <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 6 8 10.5 12.5 6l-1.2-1.2L8 8.1 4.7 4.8z"/></svg></button>
-      <button class="btn cinema-btn" id="cinema-btn" aria-pressed="false" aria-label="Cinema mode"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3h13v10h-13zM3 4.5v7h10v-7zM6.5 6v4l3.5-2z"/></svg><span class="label"> Cinema</span></button>
-    </div>
-    <div class="timeline" id="timeline" aria-label="Chapters">
-      <div class="track"></div>
-      <div class="fill" id="fill"></div>
-    </div>
-  </header>
+<main class="stage" id="stage">
+  <canvas id="base" aria-hidden="true"></canvas>
+  <canvas id="globe" aria-label="Globe showing the crusades"></canvas>
+  <div class="vignette"></div>
+  <div class="pulse" id="pulse" hidden></div>
+  <div class="days fade" id="days"></div>
 
-  <main class="stage" id="stage">
-    <canvas id="base" aria-hidden="true"></canvas>
-    <canvas id="globe" aria-label="Globe showing the route of the First Crusade"></canvas>
-    <div class="pulse" id="pulse" hidden></div>
-    <div class="days" id="days" hidden></div>
-    <div class="cine" id="cine">
-      <div class="cine-card">
-        <div class="eyebrow" id="cine-date"></div>
-        <h2 id="cine-title"></h2>
-        <p id="cine-text"></p>
-      </div>
-      <div class="cine-controls">
-        <button class="btn" id="cine-prev" aria-label="Previous chapter"><svg viewBox="0 0 16 16"><path d="M10.5 2 4.5 8l6 6 1.2-1.2L6.9 8l4.8-4.8z"/></svg></button>
-        <button class="btn" id="cine-play" aria-label="Play"></button>
-        <button class="btn" id="cine-next" aria-label="Next chapter"><svg viewBox="0 0 16 16"><path d="M5.5 2 4.3 3.2 9.1 8l-4.8 4.8L5.5 14l6-6z"/></svg></button>
-        <button class="btn" id="cine-exit">Exit cinema</button>
-      </div>
-    </div>
-    <div class="legend" id="legend"></div>
-    <button class="recenter" id="recenter" hidden>Back to the story</button>
-  </main>
+  <div class="titlecard fade" id="titlecard"><div class="date" id="tc-date"></div><h2 id="tc-title"></h2><span class="rule"></span></div>
+  <div class="figure fade" id="figure"><canvas id="fig-canvas" width="128" height="128" aria-hidden="true"></canvas><div><div class="name" id="fig-name"></div><div class="role" id="fig-role"></div></div></div>
+  <div class="quote fade" id="quote"><blockquote><p id="q-text"></p><cite id="q-cite"></cite></blockquote></div>
+  <div class="partcard fade" id="partcard"><div class="eyebrow" id="pc-eyebrow"></div><h2 id="pc-title"></h2><div class="years" id="pc-years"></div></div>
+  <div class="subs" aria-live="polite"><p id="subs"></p></div>
 
-  <aside class="panel">
-    <div class="controls">
-      <span class="count" id="count"></span>
-      <button class="btn" id="prev" aria-label="Previous chapter"><svg viewBox="0 0 16 16"><path d="M10.5 2 4.5 8l6 6 1.2-1.2L6.9 8l4.8-4.8z"/></svg></button>
-      <button class="btn" id="play" aria-label="Play"><svg viewBox="0 0 16 16" id="play-icon"><path d="M4 2.5v11L13 8z"/></svg></button>
-      <button class="btn primary" id="next" aria-label="Next chapter"><span id="next-label">Next</span> <svg viewBox="0 0 16 16"><path d="M5.5 2 4.3 3.2 9.1 8l-4.8 4.8L5.5 14l6-6z"/></svg></button>
-    </div>
-    <article class="chapter" id="chapter" aria-live="polite"></article>
-  </aside>
-</div>
+  <div class="progress"><i id="progress"></i></div>
+  <div class="where" id="where"></div>
+  <div class="hud" id="hud" role="toolbar" aria-label="Playback">
+    <button id="h-prev" aria-label="Previous chapter"><svg viewBox="0 0 16 16"><path d="M3 2.5h2v11H3zM14 2.5v11L6 8z"/></svg></button>
+    <button id="h-play" class="main" aria-label="Pause"><svg viewBox="0 0 16 16" id="h-play-icon"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg></button>
+    <button id="h-next" aria-label="Next chapter"><svg viewBox="0 0 16 16"><path d="M11 2.5h2v11h-2zM2 2.5v11L10 8z"/></svg></button>
+    <span class="sep"></span>
+    <button id="h-mute" aria-label="Mute"><svg viewBox="0 0 16 16" id="h-mute-icon"><path d="M2 6h3l4-3.5v11L5 10H2zM11 5.2a4 4 0 0 1 0 5.6l-.9-.9a2.7 2.7 0 0 0 0-3.8zM12.8 3.4a6.5 6.5 0 0 1 0 9.2l-.9-.9a5.2 5.2 0 0 0 0-7.4z"/></svg></button>
+    <button id="h-cc" class="cc" aria-label="Subtitles" aria-pressed="true">CC</button>
+    <button id="h-toc" aria-label="Chapters"><svg viewBox="0 0 16 16"><path d="M2 3h2v2H2zM6 3h8v2H6zM2 7h2v2H2zM6 7h8v2H6zM2 11h2v2H2zM6 11h8v2H6z"/></svg></button>
+  </div>
 
-<dialog id="figure"><div class="dlg" id="figure-body"></div></dialog>
-<dialog id="picker" aria-label="Choose a crusade"><div class="dlg">
-  <h2>Choose a crusade</h2>
-  <div class="picker-list" id="picker-list"></div>
-  <button class="btn close" id="picker-close">Close</button>
-</div></dialog>
+  <div class="opening" id="opening">
+    <div class="cross" aria-hidden="true">✠</div>
+    <h1>The Crusades</h1>
+    <div class="sub">A chronicle in three parts · 1095–1192</div>
+    <button class="begin" id="begin"><svg viewBox="0 0 16 16"><path d="M4 2.5v11L13 8z"/></svg> Begin</button>
+    <div class="parts" id="parts"></div>
+    <div class="sound-note">Best with sound on. Tap the screen any time for controls.</div>
+  </div>
+</main>
+
+<dialog id="toc"><div class="toc" id="toc-body"></div></dialog>
 
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
 <script src="data/land.js"></script>
 <script src="data/geography.js"></script>
 <script src="data/first-crusade.js"></script>
-<script src="sprites.js"></script>
-<script src="battle.js"></script>
 <script src="data/second-crusade.js"></script>
 <script src="data/third-crusade.js"></script>
+<script src="data/narration.js"></script>
+<script src="sprites.js"></script>
+<script src="battle.js"></script>
+<script src="audio.js"></script>
 <script src="app.js"></script>

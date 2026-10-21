@@ -33,8 +33,6 @@
     chapterIndex = Object.fromEntries(chapters.map((c, i) => [c.id, i]));
     routeNow = {};
     readRouteColors();
-    buildTimeline();
-    el("crusade-name").textContent = `${m.name} · ${m.years}`;
     baseKey = "";
   }
 
@@ -139,13 +137,12 @@
     // Tall, narrow stages (phones) zoom in a little so the globe isn't lost in empty space.
     base = Math.max(Math.min(W, H), Math.min(W * 1.4, H * 0.75)) * 0.46;
     baseKey = "";
-    if (chapters[current] && el("legend").childElementCount) renderLegend();
     draw();
   }
 
   function applyCam() {
-    // In cinema mode the caption covers the bottom of the screen, so the view sits higher.
-    projection.scale(base * cam.k).translate([W / 2, cinema ? H * 0.36 : H / 2]).rotate([-cam.lon, -cam.lat, 0]);
+    // Subtitles sit at the bottom of the screen, so the view centres a little high.
+    projection.scale(base * cam.k).translate([W / 2, H * 0.47]).rotate([-cam.lon, -cam.lat, 0]);
   }
   const visible = (pt) => d3.geoDistance(pt, [cam.lon, cam.lat]) < 1.45;
 
@@ -266,11 +263,13 @@
     if (!W) return;
     applyCam();
     const snap = territoryAt(mapYearNow);
-    const key = [cam.lon, cam.lat, cam.k, W, H, cinema, colors.sea, snap ? snap.year : 0].join("|");
+    const key = [cam.lon, cam.lat, cam.k, W, H, colors.sea, snap ? snap.year : 0].join("|");
     if (key !== baseKey) { drawBase(); baseKey = key; }
     ctx.clearRect(0, 0, W, H);
     const now = performance.now() / 1000;
-    const cur = chapters[current];
+    // Between chapters (intro, part cards) nothing on the map is singled out.
+    const cur = focusOn ? chapters[current] : { at: [999, 999] };
+    const shownUpTo = focusOn ? current : -1;
     const figS = Math.max(11, Math.min(26, 8 + cam.k * 1.4));
 
     // routes
@@ -304,7 +303,7 @@
     const near = (a, b) => Math.abs(a[0] - b[0]) < 0.06 && Math.abs(a[1] - b[1]) < 0.06;
     const marks = [];
     for (const lm of C.landmarks) marks.push({ name: lm.name, at: lm.at, icon: lm.icon, pri: lm.major ? 1 : 3 });
-    for (let i = 0; i <= current; i++) {
+    for (let i = 0; i <= shownUpTo; i++) {
       const ch = chapters[i];
       if (i === 0 && current !== 0 && !ch.fight) continue;
       if (marks.some((m) => near(m.at, ch.at))) continue;
@@ -374,7 +373,7 @@
       }
     }
     // river and mountain names when close in
-    if (cam.k >= 5.5) {
+    if (cam.k >= 7) {
       for (const rv of GEO.rivers || []) {
         const mid = rv.path[Math.floor(rv.path.length / 2)];
         if (!visible(mid)) continue;
@@ -446,7 +445,9 @@
   }
 
   const pulse = el("pulse");
+  let focusOn = false;
   function placePulse() {
+    if (!focusOn) { pulse.hidden = true; return; }
     const at = chapters[current].at;
     if (!visible(at)) { pulse.hidden = true; return; }
     const [x, y] = projection(at);
@@ -464,27 +465,54 @@
   }
   function setDays(ch, f) {
     const n = daysOf(ch);
-    if (!n) { dayEl.hidden = true; return; }
-    dayEl.hidden = false;
+    if (!n) { dayEl.classList.remove("show"); return; }
+    dayEl.classList.add("show");
     const d = Math.max(1, Math.round(n * f));
-    dayEl.innerHTML = `<b>Day ${d.toLocaleString("en")}</b> ${esc(ch.days.label || "")}`;
+    dayEl.innerHTML = `<b>Day ${d.toLocaleString("en")}</b>${esc(ch.days.label || "")}`;
+  }
+
+  // ======================================================================
+  // The film: a director that plays the story as a narrated sequence.
+  // Everything is timed by the audio clock, so pausing the audio freezes the whole film.
+  // ======================================================================
+  const N = window.NARRATION || {};
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
+  }
+
+  // ---------- clock ----------
+  let vClock = 0, vLast = performance.now(), vRunning = false;
+  function clock() {
+    if (Sound.ctx) return Sound.now();
+    const n = performance.now();
+    if (vRunning) vClock += (n - vLast) / 1000;
+    vLast = n;
+    return vClock;
   }
 
   // ---------- animation ----------
-  let anim = null, raf = 0, marching = false, paused = false;
-  function loop(now) {
-    raf = 0;
-    if (paused || document.hidden) return;
+  let anim = null, marching = false, idleSpin = true, sceneOpen = false;
+  function loop() {
+    requestAnimationFrame(loop);
+    if (document.hidden) return;
+    const ms = clock() * 1000;
+    if (idleSpin) { cam.lon += 0.03; }
     if (anim) {
-      const t = Math.min(1, (now - anim.start) / anim.dur);
+      const t = Math.min(1, (ms - anim.start) / anim.dur);
       anim.step(t);
-      if (t >= 1) { const done = anim.done; anim = null; marching = false; done && done(); }
+      if (t >= 1) { anim = null; marching = false; drift = { k: cam.k, at: ms }; }
+    } else if (drift && playing) {
+      // a slow push-in while the narrator speaks
+      cam.k = drift.k * (1 + Math.min(0.12, (ms - drift.at) / 600000));
     }
-    draw();
-    raf = requestAnimationFrame(loop);
+    updateTrack();
+    if (!sceneOpen) {
+      Sound.setAmbience({ wind: 0.6, sea: 0, fire: 0, crowd: 0, gallop: 0, march: marching ? 0.8 : 0, battle: 0 });
+      draw();
+    }
+    Sound.tick();
   }
-  function kick() { if (!raf && !paused) raf = requestAnimationFrame(loop); }
-  document.addEventListener("visibilitychange", kick);
+  let drift = null;
 
   function travel(index) {
     const ch = chapters[index];
@@ -494,29 +522,28 @@
     const toRoutes = routeStates[index];
     const moving = new Set(Object.keys(ch.routes || {}));
     activeRoutes = moving;
-    userMoved = false; recenterBtn.hidden = true;
+    drift = null;
     const targetYear = ch.mapYear || ch.year;
-
+    const prevCh = chapters[index - 1];
+    const dayStart = prevCh && prevCh.days && ch.days && prevCh.days.from === ch.days.from && daysOf(ch) ? daysOf(prevCh) / daysOf(ch) : 0;
     if (reduceMotion) {
       Object.assign(cam, to); routeNow = { ...toRoutes }; mapYearNow = targetYear; setDays(ch, 1);
-      kick(); afterTravel(); return;
+      drift = { k: cam.k, at: clock() * 1000 };
+      return;
     }
     const interp = d3.geoInterpolate([from.lon, from.lat], [to.lon, to.lat]);
     const dist = d3.geoDistance([from.lon, from.lat], [to.lon, to.lat]);
-    const flyDur = 900 + Math.min(1600, dist * 4000) + Math.abs(Math.log(to.k / from.k)) * 250;
+    const flyDur = 1600 + Math.min(2400, dist * 5000) + Math.abs(Math.log(to.k / from.k)) * 350;
     const hasRoutes = moving.size > 0;
-    const dur = flyDur + (hasRoutes ? 3200 * 0.85 : 0) + (ch.days ? 900 : 0);
+    // Armies march for most of the narration, not just a moment.
+    const marchDur = hasRoutes ? 9000 : 0;
+    const dur = flyDur + marchDur + (ch.days ? 1500 : 0);
     const flyEnd = flyDur / dur;
-    // On long hops, pull back first so the viewer sees where we are going.
     const lk0 = Math.log(from.k), lk1 = Math.log(to.k);
     const lkMid = Math.min(lk0, lk1, Math.log(Math.max(1.1, Math.min(from.k, to.k) / (1 + dist * 6))));
-    // A siege counted across two chapters carries on from where the last one stopped.
-    const prevCh = chapters[index - 1];
-    const dayStart = prevCh && prevCh.days && ch.days && prevCh.days.from === ch.days.from && daysOf(ch) ? daysOf(prevCh) / daysOf(ch) : 0;
     setDays(ch, dayStart);
-
     anim = {
-      start: performance.now(), dur,
+      start: clock() * 1000, dur,
       step(t) {
         const ft = d3.easeCubicInOut(Math.min(1, t / flyEnd));
         const [lon, lat] = interp(ft);
@@ -524,7 +551,7 @@
         const a = (1 - ft) * (1 - ft), b = 2 * ft * (1 - ft), c = ft * ft;
         cam.k = Math.exp(a * lk0 + b * lkMid + c * lk1);
         if (ft > 0.5) mapYearNow = targetYear;
-        const rt = d3.easeSinInOut(Math.max(0, Math.min(1, (t - flyEnd * 0.6) / (1 - flyEnd * 0.6))));
+        const rt = d3.easeSinInOut(Math.max(0, Math.min(1, (t - flyEnd * 0.8) / (1 - flyEnd * 0.8))));
         if (hasRoutes) {
           const next = { ...toRoutes };
           for (const id of Object.keys(toRoutes)) {
@@ -536,386 +563,340 @@
         } else {
           routeNow = { ...toRoutes };
         }
-        if (ch.days) setDays(ch, dayStart + (1 - dayStart) * d3.easeCubicOut(Math.max(0, (t - flyEnd * 0.5) / (1 - flyEnd * 0.5))));
+        if (ch.days) setDays(ch, dayStart + (1 - dayStart) * d3.easeCubicOut(Math.max(0, (t - flyEnd * 0.6) / (1 - flyEnd * 0.6))));
       },
-      done: afterTravel,
     };
-    kick();
   }
 
-  function afterTravel() {
-    const ch = chapters[current];
-    if (cinema && playing && (ch.battle || ch.moment)) {
-      autoTimer = setTimeout(() => openScene(ch.moment || ch.battle, true), 2200);
-      return;
-    }
-    scheduleAutoplay();
-  }
-
-  // ---------- chronicle panel ----------
-  const chapterEl = el("chapter");
-  function esc(s) {
-    return String(s).replace(/[&<>"]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
-  }
-  const safeUrl = (u) => (/^https:\/\//.test(u || "") ? u : "");
-
-  function sceneButton(kind, id) {
-    const sc = C.battles[id];
-    if (!sc) return "";
-    const isBattle = kind === "battle";
-    return `<button class="watch ${isBattle ? "" : "moment"}" data-scene="${esc(id)}">
-      <span class="watch-icon" aria-hidden="true">${isBattle ? "⚔" : "✠"}</span>
-      <span><strong>${isBattle ? "Watch the battle" : "See the moment"}</strong><small>${esc(sc.title)}</small></span></button>`;
-  }
-
-  function renderChapter() {
-    const ch = chapters[current];
-    const figs = (ch.figures || []).filter((id) => C.figures[id]).map((id) => [id, C.figures[id]]);
-    chapterEl.innerHTML = `
-      <div class="eyebrow">${esc(ch.date)}</div>
-      <h2>${esc(ch.title)}</h2>
-      <div class="place">${esc(ch.place)}</div>
-      ${ch.body.map((p) => `<p>${esc(p)}</p>`).join("")}
-      ${ch.battle || ch.moment ? `<div class="scenes">${ch.moment ? sceneButton("moment", ch.moment) : ""}${ch.battle ? sceneButton("battle", ch.battle) : ""}</div>` : ""}
-      ${(ch.quotes || []).map((q) => `<blockquote><p>“${esc(q.text)}”</p><cite>${safeUrl(q.url) ? `<a href="${esc(q.url)}" target="_blank" rel="noopener">${esc(q.source)}</a>` : esc(q.source)}</cite></blockquote>`).join("")}
-      ${ch.myth ? `<aside class="myth"><div class="myth-row"><span class="tag">Myth</span><p>${esc(ch.myth.myth)}</p></div><div class="myth-row"><span class="tag fact">The sources</span><p>${esc(ch.myth.fact)}</p></div></aside>` : ""}
-      ${ch.today ? `<p class="today"><span class="tag plain">Today</span> ${esc(ch.today)}</p>` : ""}
-      ${figs.length ? `<section class="people"><h3>KEY FIGURES</h3><div class="chips">${figs
-        .map(([id, f]) => `<button class="chip" data-fig="${esc(id)}"><canvas class="mini" data-portrait="${esc(id)}" width="56" height="56" aria-hidden="true"></canvas>${esc(f.name)}</button>`)
-        .join("")}</div></section>` : ""}
-      ${(ch.sources || []).length ? `<section class="sources"><h3>READ THE SOURCES</h3><ul>${ch.sources
-        .map((s) => `<li>${safeUrl(s.url) ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a>` : esc(s.title)}</li>`).join("")}</ul></section>` : ""}
-    `;
-    paintPortraits(chapterEl);
-    chapterEl.scrollTop = 0;
-    el("count").textContent = `Chapter ${current + 1} of ${chapters.length}`;
-    el("prev").disabled = current === 0 && MODULES.indexOf(C) === 0;
-    const last = current === chapters.length - 1;
-    const nextModule = MODULES[MODULES.indexOf(C) + 1];
-    el("next").disabled = last && !nextModule;
-    el("next-label").textContent = last && nextModule ? "Next crusade" : "Next";
-    document.querySelectorAll(".tick").forEach((t, i) => {
-      t.classList.toggle("on", i === current);
-      t.classList.toggle("past", i < current);
-      t.setAttribute("aria-current", i === current ? "step" : "false");
-    });
-    el("fill").style.width = tickPct(current) + "%";
-    renderLegend();
-    renderCinemaCaption();
-  }
-
-  function paintPortraits(root) {
-    root.querySelectorAll("canvas[data-portrait]").forEach((cv) => {
-      const f = C.figures[cv.dataset.portrait] || findFigure(cv.dataset.portrait);
-      const c2 = cv.getContext("2d");
-      const r = cv.width / 2;
-      c2.clearRect(0, 0, cv.width, cv.height);
-      Sprites.portrait(c2, (f && f.portrait) || { kind: "knight" }, r, r, r - 1);
-    });
-  }
-  function findFigure(id) {
-    for (const m of MODULES) if (m.figures[id]) return m.figures[id];
-    return null;
-  }
-
-  function renderLegend() {
-    const ids = Object.keys(routeStates[current] || {}).filter((id) => C.routes[id] && !C.routes[id].noLegend && (!C.routes[id].until || chapterIndex[C.routes[id].until] >= current || true));
-    const seen = new Set();
-    const routes = ids.filter((id) => { const l = C.routes[id].label; if (seen.has(l)) return false; seen.add(l); return true; })
-      .map((id) => `<span><i style="background:${colors[id] || "var(--vermilion)"}"></i>${esc(C.routes[id].label)}</span>`).join("");
-    const snap = territoryAt(chapters[current].mapYear || chapters[current].year);
-    // Only list powers whose lands are in view at this chapter's camera.
-    const ch = chapters[current];
-    const view = d3.geoOrthographic().clipAngle(90).scale(base * ch.view.k).translate([W / 2, H / 2]).rotate([-ch.view.at[0], -ch.view.at[1], 0]);
-    const inView = (a) => {
-      if (d3.geoDistance(a.center, ch.view.at) > 1.4) return false;
-      const p = view(a.center);
-      return p && p[0] > -W * 0.1 && p[0] < W * 1.1 && p[1] > -H * 0.1 && p[1] < H * 1.1;
+  function flyOverview(at, k, ms = 4000) {
+    const from = { ...cam };
+    const interp = d3.geoInterpolate([from.lon, from.lat], at);
+    drift = null;
+    anim = {
+      start: clock() * 1000, dur: reduceMotion ? 1 : ms,
+      step(t) {
+        const e = d3.easeCubicInOut(t);
+        [cam.lon, cam.lat] = interp(e);
+        cam.k = Math.exp(Math.log(from.k) + (Math.log(k) - Math.log(from.k)) * e);
+      },
     };
-    const powers = snap ? [...new Set(snap.areas.filter(inView).map((a) => a.power))].filter((p) => GEO.powers[p]) : [];
-    const lands = powers.map((p) => `<span><i class="sq" style="background:${rgba(GEO.powers[p].color, 0.55)};border-color:${GEO.powers[p].color}"></i>${esc(GEO.powers[p].name)}</span>`).join("");
-    el("legend").innerHTML = `${lands ? `<div class="lg-row">${lands}</div>` : ""}${routes ? `<div class="lg-row">${routes}</div>` : ""}`;
   }
 
-  chapterEl.addEventListener("click", (e) => {
-    const b = e.target.closest("[data-fig]");
-    if (b) openFigure(b.dataset.fig);
-    const s = e.target.closest("[data-scene]");
-    if (s) openScene(s.dataset.scene, false);
-  });
-
-  function openScene(id, auto) {
-    const sc = C.battles[id];
-    if (!sc) { scheduleAutoplay(); return; }
-    const resume = playing && cinema;
-    if (!resume) setPlaying(false);
-    clearTimeout(autoTimer);
-    paused = true;
-    Battle.open(sc, () => {
-      paused = false; kick();
-      if (resume && auto) {
-        const ch = chapters[current];
-        // A chapter can have both a moment and a battle: play the battle after the moment.
-        if (ch.moment === id && ch.battle) { autoTimer = setTimeout(() => openScene(ch.battle, true), 800); return; }
-        scheduleAutoplay(3000);
-      } else {
-        const btn = chapterEl.querySelector(`[data-scene="${id}"]`);
-        btn && btn.focus();
-      }
-    }, { autoClose: auto && resume });
+  // ---------- overlays ----------
+  const subsEl = el("subs");
+  const show = (id, on) => el(id).classList.toggle("show", !!on);
+  function setSub(text) { if (subsEl.textContent !== text) subsEl.textContent = text; }
+  function clearOverlays() {
+    ["titlecard", "quote", "figure", "partcard", "days"].forEach((id) => show(id, false));
+    setSub("");
   }
-
-  // ---------- timeline ----------
-  const tickPct = (i) => 1.5 + (97 * i) / Math.max(1, chapters.length - 1);
-  function buildTimeline() {
-    const tl = el("timeline");
-    tl.querySelectorAll(".tick, .year").forEach((n) => n.remove());
-    let lastYear = null;
-    chapters.forEach((ch, i) => {
-      const b = document.createElement("button");
-      b.className = "tick";
-      b.style.left = tickPct(i) + "%";
-      b.title = `${ch.date}: ${ch.title}`;
-      b.setAttribute("aria-label", `${ch.date}: ${ch.title}`);
-      b.addEventListener("click", () => go(i));
-      tl.appendChild(b);
-      if (ch.year !== lastYear) {
-        const y = document.createElement("span");
-        y.dataset.i = i;
-        y.className = "year";
-        y.style.left = tickPct(i) + "%";
-        y.textContent = ch.year;
-        tl.appendChild(y);
-        lastYear = ch.year;
-      }
-    });
-    spaceYears();
+  function showTitle(ch) {
+    el("tc-date").textContent = ch.date;
+    el("tc-title").textContent = ch.title;
+    show("titlecard", true);
   }
-  function spaceYears() {
-    const w = el("timeline").clientWidth;
-    let last = 1e9;
-    [...document.querySelectorAll(".year")].reverse().forEach((y) => {
-      const x = (tickPct(+y.dataset.i) / 100) * w;
-      y.hidden = last - x < 44;
-      if (!y.hidden) last = x;
-    });
-  }
-  new ResizeObserver(spaceYears).observe(el("timeline"));
-
-  // ---------- crusade picker ----------
-  const picker = el("picker");
-  el("crusade-btn").addEventListener("click", () => {
-    el("picker-list").innerHTML = MODULES.map((m, i) => `
-      <button class="pick ${m === C ? "on" : ""}" data-mod="${i}">
-        <span class="pick-years">${esc(m.years)}</span>
-        <span class="pick-name">${esc(m.name)}</span>
-        ${m.blurb ? `<span class="pick-blurb">${esc(m.blurb)}</span>` : ""}
-      </button>`).join("");
-    picker.showModal ? picker.showModal() : picker.setAttribute("open", "");
-  });
-  picker.addEventListener("click", (e) => {
-    if (e.target === picker || e.target.id === "picker-close") return picker.close();
-    const b = e.target.closest("[data-mod]");
-    if (b) { picker.close(); switchModule(MODULES[+b.dataset.mod], 0); }
-  });
-  function switchModule(m, i) {
-    if (m !== C) { useModule(m); renderLegend(); }
-    go(i);
-  }
-
-  // ---------- figures ----------
-  const dlg = el("figure");
-  function openFigure(id) {
+  function showFigure(id) {
     const f = C.figures[id];
-    const appears = chapters.map((c, i) => [c, i]).filter(([c]) => (c.figures || []).includes(id));
-    el("figure-body").innerHTML = `
-      <canvas class="big-portrait" data-portrait="${esc(id)}" width="176" height="176" aria-hidden="true"></canvas>
-      <h2>${esc(f.name)}</h2>
-      <div class="role">${esc(f.role)}</div>
-      <div class="life">${esc(f.life)}</div>
-      ${f.bio.map((p) => `<p>${esc(p)}</p>`).join("")}
-      <div class="people"><h3>APPEARS IN</h3>
-        <div class="appears">${appears.map(([c, i]) => `<button data-go="${i}">${esc(c.title)}</button>`).join("<span aria-hidden='true'>·</span>")}</div>
-      </div>
-      <button class="btn close" id="figure-close">Close</button>`;
-    paintPortraits(el("figure-body"));
-    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
+    if (!f) return show("figure", false);
+    el("fig-name").textContent = f.name;
+    el("fig-role").textContent = f.role || "";
+    const cv = el("fig-canvas"), c2 = cv.getContext("2d");
+    c2.clearRect(0, 0, cv.width, cv.height);
+    Sprites.portrait(c2, f.portrait || { kind: "knight" }, cv.width / 2, cv.height / 2, cv.width / 2 - 2);
+    show("figure", true);
   }
-  dlg.addEventListener("click", (e) => {
-    if (e.target === dlg || e.target.id === "figure-close") return dlg.close();
-    const g = e.target.closest("[data-go]");
-    if (g) { dlg.close(); go(+g.dataset.go); }
+  function showQuote(text, source) {
+    el("q-text").textContent = text;
+    el("q-cite").textContent = source || "";
+    show("quote", true);
+  }
+
+  // ---------- narration ----------
+  let track = null;
+  function narrate(id, onCue, lead = 0.3) {
+    const n = N[id];
+    const my = token;
+    return new Promise(async (resolve) => {
+      let buf = null;
+      if (n && Sound.ctx) buf = await Sound.load(n.src);
+      if (my !== token) return resolve(false);
+      const t0 = buf ? Sound.playVoice(buf, lead) : clock() + lead;
+      track = { t0, dur: n ? n.dur : 5, cues: n ? n.cues : [], onCue, resolve, idx: -1 };
+    });
+  }
+  function updateTrack() {
+    if (!track) return;
+    const t = clock() - track.t0;
+    let i = track.idx;
+    while (i + 1 < track.cues.length && track.cues[i + 1].t <= t) i++;
+    if (i !== track.idx) { track.idx = i; track.onCue && track.onCue(track.cues[i], i); }
+    const c = track.cues[track.idx];
+    if (c && t > c.t + c.d + 0.3 && c.kind !== "quote") setSub("");
+    if (t >= track.dur) { const r = track.resolve; track = null; r(true); }
+  }
+
+  // ---------- the sequence ----------
+  const SEQ = [{ type: "intro" }];
+  MODULES.forEach((m, mi) => {
+    SEQ.push({ type: "part", m, n: mi });
+    m.chapters.forEach((ch, i) => SEQ.push({ type: "chapter", m, i }));
   });
+  SEQ.push({ type: "outro" });
+  const PART = ["Part One", "Part Two", "Part Three", "Part Four", "Part Five"];
 
-  // ---------- navigation ----------
-  function go(i) {
-    clearTimeout(autoTimer);
-    if (i >= chapters.length) {
-      const next = MODULES[MODULES.indexOf(C) + 1];
-      if (next) return switchModule(next, 0);
-      i = chapters.length - 1;
-    }
-    if (i < 0) {
-      const prev = MODULES[MODULES.indexOf(C) - 1];
-      if (prev) { useModule(prev); return go(prev.chapters.length - 1); }
-      i = 0;
-    }
-    current = i;
-    renderChapter();
-    travel(i);
+  let step = -1, token = 0, playing = false;
+  const introduced = new Set();
+  const moodOf = (ch) => (ch.fight || ch.battle ? "dark" : ch.moment ? "holy" : ch.routes ? "march" : "calm");
+
+  function goStep(k) {
+    k = Math.max(0, Math.min(SEQ.length - 1, k));
+    const prev = step;
+    const my = ++token;
+    step = k;
+    track = null;
+    Sound.stopVoice();
+    if (sceneOpen) Battle.close();
+    clearOverlays();
+    updateProgress();
+    if (!playing) setPlaying(true);
+    const s = SEQ[k];
+    if (s.m && s.m !== C) { useModule(s.m); introduced.clear(); }
+    focusOn = false;
+    if (s.type === "intro") return playIntro(my);
+    if (s.type === "outro") return playOutro(my);
+    if (s.type === "part") return playPart(s, my);
+    return playChapter(s, my, prev === k - 1);
+  }
+  const next = () => goStep(step + 1);
+
+  async function playIntro(my) {
+    useModule(MODULES[0]);
+    routeNow = {}; mapYearNow = 1090;
+    flyOverview([24, 38], 1.5, 9000);
+    Sound.setMood("title");
+    Sound.play("bell");
+    await narrate("intro", (c) => setSub(c.sub), 1.2);
+    if (my === token) next();
   }
 
-  let playing = false, autoTimer = 0;
-  const playBtn = el("play");
+  async function playPart(s, my) {
+    routeNow = {};
+    introduced.clear();
+    const first = s.m.chapters[0];
+    mapYearNow = first.mapYear || first.year;
+    flyOverview(first.view.at, Math.min(2.2, first.view.k), 5000);
+    el("pc-eyebrow").textContent = PART[s.n] || "";
+    el("pc-title").textContent = s.m.name;
+    el("pc-years").textContent = s.m.years;
+    show("partcard", true);
+    Sound.setMood("title");
+    Sound.play("boom");
+    setTimeout(() => Sound.play("bell"), 700);
+    await narrate(`part:${s.m.id}`, (c) => setSub(c.kind === "line" ? c.sub : ""), 1.0);
+    if (my !== token) return;
+    show("partcard", false);
+    next();
+  }
+
+  async function playChapter(s, my, sequential) {
+    current = s.i;
+    focusOn = true;
+    const ch = chapters[current];
+    if (!sequential) {
+      // Jumped here: put the armies and borders where the previous chapter left them.
+      routeNow = { ...(routeStates[current - 1] || {}) };
+      const p = chapters[current - 1];
+      mapYearNow = p ? p.mapYear || p.year : ch.mapYear || ch.year;
+    }
+    travel(current);
+    Sound.play("boom");
+    Sound.play("whoosh");
+    Sound.setMood(moodOf(ch));
+    showTitle(ch);
+    const figs = (ch.figures || []).filter((id) => C.figures[id] && !introduced.has(id)).slice(0, 3);
+    let line = 0;
+    await narrate(`ch:${C.id}:${ch.id}`, (c) => {
+      if (c.kind === "title") return;
+      show("titlecard", false);
+      if (c.kind === "quote") {
+        show("figure", false);
+        setSub("");
+        showQuote(c.sub, c.source);
+        return;
+      }
+      show("quote", false);
+      setSub(c.sub);
+      // introduce new key figures one per sentence, early in the chapter
+      const f = figs[line];
+      if (f) { introduced.add(f); showFigure(f); } else show("figure", false);
+      line++;
+    });
+    if (my !== token) return;
+    show("quote", false); show("figure", false); show("days", false);
+    for (const id of [ch.moment, ch.battle].filter(Boolean)) {
+      await playScene(id, my);
+      if (my !== token) return;
+    }
+    next();
+  }
+
+  function playScene(id, my) {
+    return new Promise(async (resolve) => {
+      const sc = C.battles[id];
+      if (!sc) return resolve();
+      const n = N[`sc:${C.id}:${id}`];
+      const buf = n && Sound.ctx ? await Sound.load(n.src) : null;
+      if (my !== token) return resolve();
+      const isBattle = id === chapters[current].battle;
+      Sound.setMood(isBattle ? "battle" : "holy");
+      Sound.play(isBattle ? "boom" : "bell");
+      setSub("");
+      const t0 = buf ? Sound.playVoice(buf, 0.9) : clock() + 0.9;
+      const dur = n ? n.dur : sc.phases.length * 6 + 2;
+      const cues = sc.phases.map((_, i) => {
+        const c = n && n.cues.find((q) => q.kind === "phase" && q.phase === i);
+        return c ? c.t : 2 + i * 6;
+      });
+      sceneOpen = true;
+      Battle.open(sc, () => { sceneOpen = false; resolve(); }, {
+        director: {
+          time: () => clock() - t0, cues, dur,
+          sound: (name) => Sound.play(name),
+          ambience: (a) => Sound.setAmbience(a),
+        },
+      });
+    });
+  }
+
+  async function playOutro(my) {
+    useModule(MODULES[MODULES.length - 1]);
+    flyOverview([30, 36], 1.6, 8000);
+    Sound.setMood("title");
+    await narrate("outro", (c) => setSub(c.sub), 0.8);
+    if (my !== token) return;
+    Sound.play("bell");
+    setSub("");
+    setPlaying(false);
+    el("begin").lastChild.textContent = " Watch again";
+    el("opening").classList.remove("gone");
+    idleSpin = true;
+  }
+
+  // ---------- controls ----------
   function setPlaying(v) {
     playing = v;
-    playBtn.setAttribute("aria-label", v ? "Pause" : "Play");
-    el("play-icon").innerHTML = v ? '<path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/>' : '<path d="M4 2.5v11L13 8z"/>';
-    el("cine-play").setAttribute("aria-label", v ? "Pause" : "Play");
-    el("cine-play").innerHTML = el("play").innerHTML;
-    clearTimeout(autoTimer);
-    if (v && !anim) {
-      const ch = chapters[current];
-      if (cinema && (ch.battle || ch.moment)) autoTimer = setTimeout(() => openScene(ch.moment || ch.battle, true), 1800);
-      else scheduleAutoplay(1500);
-    }
+    if (v) { Sound.resume(); vRunning = true; } else { Sound.suspend(); vRunning = false; }
+    el("h-play").setAttribute("aria-label", v ? "Pause" : "Play");
+    el("h-play-icon").innerHTML = v ? '<path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/>' : '<path d="M4 2.5v11L13 8z"/>';
+    document.body.classList.toggle("paused", !v);
+    if (!v) showHud(true); else pokeHud();
   }
-  function scheduleAutoplay(delay) {
-    clearTimeout(autoTimer);
-    if (!playing) return;
-    const lastOfAll = current >= chapters.length - 1 && !MODULES[MODULES.indexOf(C) + 1];
-    if (lastOfAll) return setPlaying(false);
-    const ch = chapters[current];
-    const words = (cinema ? (ch.caption || ch.body[0]) : ch.body.join(" ")).split(/\s+/).length;
-    autoTimer = setTimeout(() => go(current + 1), delay != null ? delay : Math.max(cinema ? 6500 : 7000, words * (cinema ? 300 : 230)));
+  let hudTimer = 0;
+  function showHud(stay) {
+    document.body.classList.add("hud-on");
+    clearTimeout(hudTimer);
+    if (!stay) hudTimer = setTimeout(() => { if (playing) document.body.classList.remove("hud-on"); }, 3200);
   }
-  playBtn.addEventListener("click", () => setPlaying(!playing));
-  el("prev").addEventListener("click", () => go(current - 1));
-  el("next").addEventListener("click", () => go(current + 1));
+  const pokeHud = () => showHud(false);
+  function updateProgress() {
+    el("progress").style.width = (100 * Math.max(0, step)) / (SEQ.length - 1) + "%";
+    const s = SEQ[step];
+    if (!s) return;
+    let where = "";
+    if (s.type === "chapter") where = `${PART[MODULES.indexOf(s.m)]}<span class="wm"> · ${esc(s.m.name)}</span> · Chapter ${s.i + 1} of ${s.m.chapters.length}`;
+    else if (s.type === "part") where = `${PART[s.n]} · ${esc(s.m.name)}`;
+    el("where").innerHTML = where;
+  }
+
+  el("h-play").addEventListener("click", (e) => { e.stopPropagation(); setPlaying(!playing); });
+  el("h-prev").addEventListener("click", (e) => { e.stopPropagation(); goStep(step - 1); pokeHud(); });
+  el("h-next").addEventListener("click", (e) => { e.stopPropagation(); goStep(step + 1); pokeHud(); });
+  el("h-mute").addEventListener("click", (e) => {
+    e.stopPropagation();
+    Sound.setMuted(!Sound.muted);
+    el("h-mute").classList.toggle("off", Sound.muted);
+    el("h-mute").setAttribute("aria-label", Sound.muted ? "Unmute" : "Mute");
+    pokeHud();
+  });
+  el("h-cc").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const off = document.body.classList.toggle("nosubs");
+    el("h-cc").classList.toggle("off", off);
+    el("h-cc").setAttribute("aria-pressed", off ? "false" : "true");
+    pokeHud();
+  });
+  // Tap anywhere to show the controls; tap again to hide them.
+  el("stage").addEventListener("pointerdown", (e) => {
+    if (e.target.closest(".hud, .opening, dialog")) return;
+    if (e.pointerType !== "mouse" && document.body.classList.contains("hud-on") && playing) document.body.classList.remove("hud-on");
+    else pokeHud();
+  });
+  window.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse" && step >= 0) pokeHud(); });
   document.addEventListener("keydown", (e) => {
-    if (dlg.open || picker.open || document.body.classList.contains("battle-open") || e.target.closest("input, textarea")) return;
-    if (e.key === "ArrowRight") go(current + 1);
-    if (e.key === "ArrowLeft") go(current - 1);
-    if (e.key === "Escape" && cinema) setCinema(false);
+    if (toc.open || step < 0) return;
+    if (e.key === " ") { e.preventDefault(); setPlaying(!playing); }
+    if (e.key === "ArrowRight") goStep(step + 1);
+    if (e.key === "ArrowLeft") goStep(step - 1);
+    if (e.key === "m") el("h-mute").click();
+    if (e.key === "c") el("h-cc").click();
   });
 
-  // ---------- cinema mode ----------
-  let cinema = false;
-  function setCinema(v) {
-    cinema = v;
-    document.body.classList.toggle("cinema", v);
-    el("cinema-btn").setAttribute("aria-pressed", v ? "true" : "false");
-    renderCinemaCaption();
-    setPlaying(v);
-    requestAnimationFrame(() => resize());
-  }
-  function renderCinemaCaption() {
-    const ch = chapters[current];
-    el("cine-date").textContent = ch.date;
-    el("cine-title").textContent = ch.title;
-    el("cine-text").textContent = ch.caption || ch.body[0];
-  }
-  el("cinema-btn").addEventListener("click", () => setCinema(!cinema));
-  el("cine-exit").addEventListener("click", () => setCinema(false));
-  el("cine-play").addEventListener("click", () => setPlaying(!playing));
-  el("cine-prev").addEventListener("click", () => go(current - 1));
-  el("cine-next").addEventListener("click", () => go(current + 1));
-
-  // ---------- free exploration ----------
-  const recenterBtn = el("recenter");
-  let userMoved = false;
-  recenterBtn.addEventListener("click", () => travel(current));
-  function markMoved() {
-    if (anim) { mapYearNow = chapters[current].mapYear || chapters[current].year; setDays(chapters[current], 1); }
-    anim = null; marching = false;
-    if (!userMoved) { userMoved = true; recenterBtn.hidden = false; routeNow = { ...routeStates[current] }; }
-  }
-
-  const pointers = new Map();
-  let downAt = null, pinchDist = 0, pinchK = 1;
-  canvas.addEventListener("pointerdown", (e) => {
-    canvas.setPointerCapture(e.pointerId);
-    pointers.set(e.pointerId, [e.offsetX, e.offsetY]);
-    downAt = { x: e.offsetX, y: e.offsetY, moved: false };
-    if (pointers.size === 2) {
-      const [a, b] = [...pointers.values()];
-      pinchDist = Math.hypot(a[0] - b[0], a[1] - b[1]); pinchK = cam.k;
-    }
+  // ---------- chapter list ----------
+  const toc = el("toc");
+  el("h-toc").addEventListener("click", (e) => {
+    e.stopPropagation();
+    el("toc-body").innerHTML = `<h2>Chapters</h2>${MODULES.map((m, mi) => `
+      <section><h3>${esc(PART[mi])} · ${esc(m.name)}</h3><ol>${m.chapters.map((ch, i) => {
+        const k = SEQ.findIndex((s) => s.m === m && s.i === i);
+        return `<li><button data-step="${k}" class="${k === step ? "on" : ""}"><span class="d">${ch.year}</span>${esc(ch.title)}</button></li>`;
+      }).join("")}</ol></section>`).join("")}
+      <button class="close" id="toc-close">Close</button>`;
+    toc.showModal ? toc.showModal() : toc.setAttribute("open", "");
+    const on = toc.querySelector("button.on");
+    on && on.scrollIntoView({ block: "center" });
   });
-  canvas.addEventListener("pointermove", (e) => {
-    if (!pointers.has(e.pointerId)) return;
-    const prev = pointers.get(e.pointerId);
-    pointers.set(e.pointerId, [e.offsetX, e.offsetY]);
-    if (pointers.size === 2) {
-      const [a, b] = [...pointers.values()];
-      const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
-      if (pinchDist > 0) { markMoved(); cam.k = clampK(pinchK * d / pinchDist); kick(); }
-      return;
-    }
-    const dx = e.offsetX - prev[0], dy = e.offsetY - prev[1];
-    if (downAt && Math.hypot(e.offsetX - downAt.x, e.offsetY - downAt.y) > 4) downAt.moved = true;
-    if (!downAt || !downAt.moved) return;
-    canvas.classList.add("dragging");
-    markMoved();
-    const degPerPx = 180 / Math.PI / (base * cam.k);
-    cam.lon -= dx * degPerPx;
-    cam.lat = Math.max(-80, Math.min(80, cam.lat + dy * degPerPx));
-    kick();
+  toc.addEventListener("click", (e) => {
+    if (e.target === toc || e.target.id === "toc-close") return toc.close();
+    const b = e.target.closest("[data-step]");
+    if (b) { toc.close(); goStep(+b.dataset.step); }
   });
-  const endPointer = (e) => {
-    pointers.delete(e.pointerId);
-    canvas.classList.remove("dragging");
-    if (e.type === "pointerup" && downAt && !downAt.moved && pointers.size === 0) tapAt(e.offsetX, e.offsetY);
-    if (pointers.size === 0) downAt = null;
+
+  // ---------- opening ----------
+  function begin(k) {
+    Sound.init();
+    Sound.resume();
+    Sound.setMuted(false);
+    vRunning = true;
+    idleSpin = false;
+    el("opening").classList.add("gone");
+    goStep(k);
+  }
+  el("parts").innerHTML = MODULES.map((m, mi) => `<button data-part="${mi}">${esc(PART[mi])}: ${esc(m.name.replace(/^The /, ""))}</button>`).join("");
+  el("parts").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-part]");
+    if (b) begin(SEQ.findIndex((s) => s.type === "part" && s.n === +b.dataset.part));
+  });
+  // A link to a chapter (#clermont) starts the film there.
+  const hashStep = () => {
+    const id = location.hash.slice(1);
+    const k = SEQ.findIndex((s) => s.type === "chapter" && s.m.chapters[s.i].id === id);
+    return k >= 0 ? k : 0;
   };
-  canvas.addEventListener("pointerup", endPointer);
-  canvas.addEventListener("pointercancel", endPointer);
-  canvas.addEventListener("wheel", (e) => {
-    e.preventDefault();
-    markMoved();
-    cam.k = clampK(cam.k * Math.exp(-e.deltaY * 0.0015));
-    kick();
-  }, { passive: false });
-  const clampK = (k) => Math.max(0.85, Math.min(16, k));
-
-  function tapAt(x, y) {
-    let best = -1, bestD = 22;
-    chapters.forEach((ch, i) => {
-      if (i > current || !visible(ch.at)) return;
-      const [px, py] = projection(ch.at);
-      const d = Math.hypot(px - x, py - y);
-      if (d < bestD) { bestD = d; best = i; }
-    });
-    if (best >= 0 && best !== current) go(best);
-  }
+  el("begin").addEventListener("click", () => begin(step >= SEQ.length - 1 ? 0 : hashStep()));
 
   // ---------- boot ----------
-  function findChapter(id) {
-    for (const m of MODULES) {
-      const i = m.chapters.findIndex((c) => c.id === id);
-      if (i >= 0) return [m, i];
-    }
-    const m = MODULES.find((x) => x.id === id);
-    return m ? [m, 0] : null;
-  }
   function start() {
     readColors();
-    const hit = findChapter(location.hash.slice(1));
-    useModule(hit ? hit[0] : MODULES[0]);
-    const ch0 = chapters[hit ? hit[1] : 0];
-    cam.lon = ch0.view.at[0]; cam.lat = ch0.view.at[1];
-    mapYearNow = ch0.mapYear || ch0.year;
+    useModule(MODULES[0]);
+    cam.lon = 20; cam.lat = 36; cam.k = 1.25;
+    mapYearNow = 1090;
     new ResizeObserver(resize).observe(stage);
     resize();
-    go(hit ? hit[1] : 0);
+    requestAnimationFrame(loop);
   }
-  window.addEventListener("hashchange", () => {
-    const hit = findChapter(location.hash.slice(1));
-    if (hit) switchModule(hit[0], hit[1]);
-  });
-  const reTheme = () => { readColors(); renderLegend(); draw(); };
+  const reTheme = () => { readColors(); draw(); };
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", reTheme);
   new MutationObserver(reTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { baseKey = ""; draw(); paintPortraits(chapterEl); });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { baseKey = ""; });
   start();
 })();

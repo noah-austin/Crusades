@@ -18,6 +18,8 @@ window.Battle = (() => {
 
   let root, canvas, ctx, captionEl, dotsEl, titleEl, metaEl, playBtn;
   let scene = null, phase = 0, clock = 0, playing = true, raf = 0, onCloseCb = null, autoClose = false, closeTimer = 0;
+  // When a director (the narrated film) drives the scene, its clock decides the phase and timing.
+  let director = null, lastTT = 0;
   let W = 0, H = 0, sc = 1, ox = 0, oy = 0, narrow = false, camX = null, dragX = null, manualUntil = 0;
   let units = {};
   let particles = [];
@@ -48,7 +50,7 @@ window.Battle = (() => {
           <button class="btn primary" id="battle-next" aria-label="Next moment">Next <svg viewBox="0 0 16 16"><path d="M5.5 2 4.3 3.2 9.1 8l-4.8 4.8L5.5 14l6-6z"/></svg></button>
         </div>
       </div>`;
-    document.body.appendChild(root);
+    (document.getElementById("stage") || document.body).appendChild(root);
     canvas = root.querySelector("#battle-canvas");
     ctx = canvas.getContext("2d");
     captionEl = root.querySelector("#battle-caption");
@@ -67,7 +69,7 @@ window.Battle = (() => {
       setPlaying(!playing);
     });
     document.addEventListener("keydown", (e) => {
-      if (root.hidden) return;
+      if (root.hidden || director) return;
       if (e.key === "Escape") close();
       if (e.key === "ArrowRight") { e.stopImmediatePropagation(); go(phase + 1); }
       if (e.key === "ArrowLeft") { e.stopImmediatePropagation(); go(phase - 1); }
@@ -141,7 +143,7 @@ window.Battle = (() => {
     phase = i;
     clock = 0;
     particles = [];
-    captionEl.textContent = scene.phases[i].caption;
+    if (!director) captionEl.textContent = scene.phases[i].caption;
     dotsEl.innerHTML = scene.phases.map((_, k) => `<span class="${k === i ? "on" : k < i ? "past" : ""}"></span>`).join("");
     root.querySelector("#battle-prev").disabled = i === 0;
     root.querySelector("#battle-next").firstChild.textContent = i === scene.phases.length - 1 ? "Done " : "Next ";
@@ -156,13 +158,22 @@ window.Battle = (() => {
     go(0);
   }
 
-  const phaseDur = () => (scene.phases[phase].dur || 5200) + scene.phases[phase].caption.length * 18;
+  const phaseDur = () => {
+    if (director) {
+      const a = director.cues[phase], b = director.cues[phase + 1] != null ? director.cues[phase + 1] : director.dur;
+      return Math.max(2500, (b - a) * 1000);
+    }
+    return (scene.phases[phase].dur || 5200) + scene.phases[phase].caption.length * 18;
+  };
 
   function open(sc0, onClose, opts) {
     if (!root) build();
     scene = sc0;
     onCloseCb = onClose;
     autoClose = !!(opts && opts.autoClose);
+    director = (opts && opts.director) || null;
+    lastTT = 0;
+    captionEl.textContent = "";
     clearTimeout(closeTimer);
     camX = null; manualUntil = 0;
     titleEl.textContent = scene.title;
@@ -172,7 +183,7 @@ window.Battle = (() => {
     resize();
     reset();
     setPlaying(!reduce);
-    root.querySelector("#battle-next").focus();
+    if (!director) root.querySelector("#battle-next").focus();
     if (!raf) raf = requestAnimationFrame(frame);
   }
 
@@ -183,6 +194,7 @@ window.Battle = (() => {
     document.body.classList.remove("battle-open");
     cancelAnimationFrame(raf); raf = 0;
     scene = null;
+    director = null;
     onCloseCb && onCloseCb();
   }
 
@@ -191,8 +203,20 @@ window.Battle = (() => {
   function frame(now) {
     raf = 0;
     if (!scene || root.hidden) return;
-    const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
-    clock += dt * 1000;
+    let dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+    let tt = 0;
+    if (director) {
+      tt = director.time();
+      dt = Math.max(0, Math.min(0.05, tt - lastTT)); lastTT = tt;
+      let p = 0;
+      while (p + 1 < director.cues.length && director.cues[p + 1] <= tt) p++;
+      if (p !== phase) go(p);
+      clock = Math.max(0, tt - director.cues[p]) * 1000;
+      const cap = tt >= director.cues[p] - 0.1 ? scene.phases[p].caption : "";
+      if (captionEl.textContent !== cap) captionEl.textContent = cap;
+    } else {
+      clock += dt * 1000;
+    }
     const e = clock;
     const moveDur = Math.min(3200, phaseDur() * 0.6);
     const t = reduce ? 1 : Math.min(1, e / moveDur);
@@ -221,6 +245,12 @@ window.Battle = (() => {
     }
     spawnFx(dt);
     draw(now / 1000, dt);
+    if (director) {
+      director.ambience && director.ambience(ambience());
+      if (tt >= director.dur + 1.2) { close(); return; }
+      raf = requestAnimationFrame(frame);
+      return;
+    }
     if (playing && e > phaseDur()) {
       if (phase < scene.phases.length - 1) go(phase + 1);
       else { setPlaying(false); if (autoClose) closeTimer = setTimeout(close, 1500); }
@@ -330,6 +360,25 @@ window.Battle = (() => {
     return [u.x + (Math.random() - 0.5) * f.w, u.y + (Math.random() - 0.5) * f.h - 1.2];
   }
 
+  const sound = (n) => director && director.sound && director.sound(n);
+  const MOUNTED = ["knight", "leader", "king", "templar", "hospitaller", "horsearcher", "saint"];
+  // What the scene sounds like right now, for the sound engine.
+  function ambience() {
+    const a = { wind: 0.25, sea: 0, fire: 0, crowd: 0, gallop: 0, march: 0, battle: 0 };
+    for (const u of Object.values(units)) {
+      if (u.alpha < 0.3) continue;
+      const kinds = u.def.mix || [u.def.kind];
+      if (u.walking && kinds.some((k) => MOUNTED.includes(k))) a.gallop = 1;
+      else if (u.walking) a.march = Math.max(a.march, 0.7);
+      if (u.state === "fight") a.battle = 1;
+      if (kinds.some((k) => k === "crowd" || k === "pilgrim")) a.crowd = Math.max(a.crowd, u.state === "fight" || u.walking ? 0.9 : 0.45);
+    }
+    for (const fx of scene.phases[phase].fx || []) if (fx.type === "fire") a.fire = 1;
+    if ((scene.terrain || []).some((t) => t.type === "sea" || t.type === "lake")) a.sea = 0.7;
+    if ((scene.terrain || []).some((t) => t.type === "floor")) { a.wind = 0; a.gallop = 0; }
+    return a;
+  }
+
   function spawnFx(dt) {
     if (reduce) return;
     for (const fx of scene.phases[phase].fx || []) {
@@ -340,13 +389,16 @@ window.Battle = (() => {
         if (Math.random() < rate * dt) {
           const from = randIn(a), to = randIn(b);
           particles.push({ type: fx.type, from, to, t: 0, life: 0.8 + Math.random() * 0.4 });
+          if (fx.type === "arrows") sound("arrow");
         }
       } else if (fx.type === "clash") {
         const a = units[fx.a], b = units[fx.b];
         if (!a || !b || a.walking || b.walking) continue;
         if (Math.random() < 10 * dt) {
           const mx = (a.x + b.x) / 2 + (Math.random() - 0.5) * 4, my = (a.y + b.y) / 2 + (Math.random() - 0.5) * 3;
-          particles.push({ type: Math.random() < 0.35 ? "glint" : "dust", at: [mx, my], t: 0, life: 0.7 + Math.random() * 0.6 });
+          const kind = Math.random() < 0.35 ? "glint" : "dust";
+          particles.push({ type: kind, at: [mx, my], t: 0, life: 0.7 + Math.random() * 0.6 });
+          if (kind === "glint") sound("clash");
         }
       } else if (fx.type === "fire") {
         const at = fx.unit ? (units[fx.unit] ? [units[fx.unit].x, units[fx.unit].y - (fx.lift || 0)] : null) : fx.at;
@@ -360,7 +412,11 @@ window.Battle = (() => {
   }
 
   function drawParticles(dt) {
-    particles = particles.filter((p) => (p.t += dt) < p.life);
+    particles = particles.filter((p) => {
+      p.t += dt;
+      if (p.t >= p.life && p.type === "stones") sound("thud");
+      return p.t < p.life;
+    });
     for (const p of particles) {
       const k = p.t / p.life;
       if (p.type === "arrows" || p.type === "stones") {
